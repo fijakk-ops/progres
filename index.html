@@ -628,7 +628,7 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const APP_VER = 'v14';
+const APP_VER = 'v15';
 const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
 const allEx = () => [...EX, ...(DB.myex||[])];
 const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
@@ -1249,18 +1249,25 @@ function renderWorkout(){
 }
 
 /* dokładanie ćwiczenia w trakcie treningu */
-let addExQ = '';
+let addExQ = '', addExCat = 'wszystkie';
 function openAddEx(){
-  addExQ = '';
-  $('#addExBody').innerHTML = `<input class="search" placeholder="Szukaj ćwiczenia…" oninput="addExQ=this.value;renderAddExList()">
-    <div id="addExList"></div>`;
-  renderAddExList();
+  addExQ = ''; addExCat = 'wszystkie';
+  renderAddExSheet();
   openSheet('shAddEx');
+}
+function renderAddExSheet(){
+  $('#addExBody').innerHTML = `<input class="search" placeholder="Szukaj ćwiczenia…" value="${esc(addExQ)}" oninput="addExQ=this.value;renderAddExList()">
+    <div class="chiprow">` +
+    ['wszystkie','własne',...CATS].map(c=>`<button class="chip ${addExCat===c?'on':''}" onclick="addExCat='${c}';renderAddExSheet()">${c}</button>`).join('') +
+    `</div><div id="addExList"></div>`;
+  renderAddExList();
 }
 function renderAddExList(){
   const inWo = new Set(session ? session.ex.map(e=>e.id) : []);
   const q = addExQ.trim().toLowerCase();
-  const list = allEx().filter(e => !inWo.has(e.id) && (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
+  const list = allEx().filter(e => !inWo.has(e.id)
+    && (addExCat==='wszystkie' || (addExCat==='własne' ? e.mine : e.cat===addExCat))
+    && (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
   $('#addExList').innerHTML = list.length
     ? list.map(e=>`<button class="exrow" onclick="addExToSession('${e.id}')">
         <div class="xr-body"><div class="xr-name">${e.name}</div>
