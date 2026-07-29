@@ -264,7 +264,7 @@ nav button.on .ni{color:var(--red)}
     <div class="h2">2 · Wpisywanie serii</div>
     <ol class="steps">
       <li>Zrób serię na siłowni, a <b>zaraz po niej</b> wpisz w wierszu: <b>kg</b> — ciężar, jaki podnosiłeś, i <b>Powt.</b> — ile powtórzeń zrobiłeś.</li>
-      <li>Wciśnij <b style="color:var(--green)">✓</b> — seria zostaje zaliczona i automatycznie rusza <b style="color:var(--yellow)">timer przerwy (90 s)</b>. Gdy się skończy, telefon zawibruje i piknie.</li>
+      <li>Wciśnij <b style="color:var(--green)">✓</b> — seria zostaje zaliczona i automatycznie rusza <b style="color:var(--yellow)">timer przerwy</b> (domyślnie 90 s — własną długość, dźwięk i wibrację ustawisz w Profilu).</li>
       <li>Kolumna <b>Poprz.</b> pokazuje, co zrobiłeś w tej serii ostatnim razem (np. 60×8) — staraj się to wyrównać albo pobić o powtórzenie lub 2,5 kg.</li>
       <li>Za mało wierszy? Wciśnij <b>+ dodaj serię</b>. Pomyłka? Kliknij ✓ ponownie, żeby odblokować i poprawić.</li>
     </ol>
@@ -287,6 +287,12 @@ nav button.on .ni{color:var(--red)}
 
     <button class="btn btn-red" style="margin-top:16px" onclick="closeSheet('shHelp')">Jasne, do roboty</button>
   </div>
+</div>
+
+<!-- arkusz: ustawienia treningu -->
+<div class="sheet" id="shSettings">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shSettings');renderProfil()">←</button><div class="sh-title">Ustawienia treningu</div></div>
+  <div class="sheet-bd" id="settingsBody"></div>
 </div>
 
 <!-- arkusz: szczegóły ćwiczenia -->
@@ -719,15 +725,35 @@ function confirmAnswer(yes){
 let zTop = 50;
 function openSheet(id){ const el = $('#'+id); el.style.zIndex = ++zTop; el.classList.add('open'); }
 function closeSheet(id){ $('#'+id).classList.remove('open'); }
-function vibrate(p){ if(navigator.vibrate) try{ navigator.vibrate(p); }catch(e){} }
-function beep(){
+function vibrate(p){
+  if(DB.profile && DB.profile.vibr===false) return;
+  if(navigator.vibrate) try{ navigator.vibrate(p); }catch(e){}
+}
+/* Audio odblokowywane pierwszym dotknięciem — inaczej Chrome na telefonie
+   blokuje dźwięk odtwarzany długo po ostatniej interakcji (koniec przerwy). */
+let audioCtx = null;
+function ensureAudio(){
   try{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
-    const o = ctx.createOscillator(), g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.value = 880; g.gain.setValueAtTime(.25, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+.5);
-    o.start(); o.stop(ctx.currentTime+.5);
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+  }catch(e){}
+}
+document.addEventListener('pointerdown', ensureAudio, {passive:true});
+function beep(){
+  if(DB.profile && DB.profile.sound===false) return;
+  try{
+    ensureAudio();
+    if(!audioCtx) return;
+    const t = audioCtx.currentTime;
+    /* dwa krótkie piknięcia — lepiej słyszalne niż jedno */
+    [0, .3].forEach(off=>{
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(.3, t+off);
+      g.gain.exponentialRampToValueAtTime(.001, t+off+.25);
+      o.start(t+off); o.stop(t+off+.25);
+    });
   }catch(e){}
 }
 
@@ -840,12 +866,23 @@ function renderProfil(){
           ${opt('1.55','Umiarkowana',p.activity)}${opt('1.725','Wysoka',p.activity)}
         </select></div>
     </div>
+    <div class="frm" style="margin-top:10px;margin-bottom:0"><label>Przerwa między seriami (sekundy)</label>
+      <input type="number" inputmode="numeric" min="10" max="600" value="${p.rest||''}"
+        placeholder="puste = domyślne 90 s" onchange="setProfile('rest',this.value)">
+    </div>
   </div>`;
 
   const bmi = bmiInfo();
   if(bmi) h += `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
     <span style="color:var(--dim);font-size:.85rem">Twoje BMI</span>
     <b style="color:${bmi.col};font-size:1.1rem">${bmi.bmi.toFixed(1).replace('.',',')} · ${bmi.cat}</b></div>`;
+
+  h += `<button class="exrow" onclick="openSettings()" style="margin-top:14px">
+    <span style="font-size:1.3rem">⚙</span>
+    <div class="xr-body"><div class="xr-name">Ustawienia treningu</div>
+      <div class="xr-sub">przerwa ${getRestSec()} s · dźwięk ${p.sound===false?'wył.':'wł.'} · wibracja ${p.vibr===false?'wył.':'wł.'}</div></div>
+    <div style="color:var(--dim)">›</div>
+  </button>`;
 
   h += `<div class="h2">Pomiary wagi</div><div class="card">
     <div style="display:flex;gap:10px;margin-bottom:${DB.weights.length?'12px':'0'}">
@@ -868,7 +905,26 @@ function renderProfil(){
   h += `</div>`;
   $('#main').innerHTML = h;
 }
-async function setProfile(k,v){ DB.profile[k]=v; await saveDB(); renderProfil(); }
+async function setProfile(k,v){ DB.profile[k]=v; await saveDB(); if(view==='profil' && !$('#shSettings').classList.contains('open')) renderProfil(); }
+function openSettings(){
+  const p = DB.profile;
+  $('#settingsBody').innerHTML = `
+    <div class="card">
+      <div class="frm" style="margin-bottom:0"><label>Przerwa między seriami (sekundy)</label>
+        <input type="number" inputmode="numeric" min="10" max="600" value="${p.rest||''}"
+          placeholder="puste = domyślne 90 s" onchange="setProfile('rest',this.value)">
+        <p style="color:var(--dim);font-size:.78rem;margin-top:6px;line-height:1.45">Timer startuje po każdej odhaczonej serii ✓. Typowo: 60–90 s przy lżejszych ćwiczeniach, 2–3 min przy ciężkich seriach wielostawowych.</p></div>
+    </div>
+    <div class="card">
+      <div class="pickrow" style="border-bottom:1px solid var(--line)">
+        <input type="checkbox" id="setSound" ${p.sound===false?'':'checked'} onchange="setProfile('sound',this.checked)">
+        <label for="setSound">Dźwięk po zakończonej przerwie</label></div>
+      <div class="pickrow" style="border-bottom:none">
+        <input type="checkbox" id="setVibr" ${p.vibr===false?'':'checked'} onchange="setProfile('vibr',this.checked)">
+        <label for="setVibr">Wibracja po zakończonej przerwie<br><small>iPhone nie wspiera wibracji w przeglądarce</small></label></div>
+    </div>`;
+  openSheet('shSettings');
+}
 async function addWeight(kg){
   DB.weights.push({date:new Date().toISOString(), kg:+kg});
   await saveDB();
@@ -1083,13 +1139,17 @@ function addSet(ei){
   sets.push({w: prev? prev.w:'', r:'', done:false, prev:null});
   renderWorkout();
 }
+function getRestSec(){
+  const r = parseInt(DB.profile.rest, 10);
+  return (r>=10 && r<=600) ? r : 90;   /* puste/nieprawidłowe = domyślne 90 s */
+}
 function toggleSet(ei,si){
   const s = session.ex[ei].sets[si];
   if(!s.done){
     if(s.r==='' || +s.r<=0){ toast('Wpisz liczbę powtórzeń'); return; }
     s.done = true;
     vibrate(30);
-    startRest(90);
+    startRest(getRestSec());
   } else s.done = false;
   renderWorkout();
 }
