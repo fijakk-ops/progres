@@ -320,6 +320,12 @@ nav button.on .ni{color:var(--red)}
   <div class="sheet-bd" id="customBody"></div>
 </div>
 
+<!-- arkusz: dodaj ćwiczenie do treningu -->
+<div class="sheet" id="shAddEx">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shAddEx')">←</button><div class="sh-title">Dodaj ćwiczenie</div></div>
+  <div class="sheet-bd" id="addExBody"></div>
+</div>
+
 <!-- arkusz: szczegóły sesji z historii -->
 <div class="sheet" id="shSess">
   <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shSess')">←</button><div class="sh-title" id="sessTitle"></div></div>
@@ -333,6 +339,18 @@ nav button.on .ni{color:var(--red)}
   <div style="flex:1"></div>
   <button class="tb-btn" onclick="timerAdd(15)">+15 s</button>
   <button class="tb-btn skip" onclick="timerStop()">Pomiń</button>
+</div>
+
+<div class="confirm-ov" id="nameOv">
+  <div class="confirm-box">
+    <div class="cb-msg" id="nameMsg"><b>Nazwa planu</b></div>
+    <input class="set-in" type="text" maxlength="24" placeholder="np. Mój poniedziałek"
+      id="nameIn" style="margin-bottom:12px;padding:13px;text-align:left">
+    <div class="cb-row">
+      <button class="btn btn-ghost" style="flex:1" onclick="nameOvClose(false)">Anuluj</button>
+      <button class="btn btn-green" style="flex:1" onclick="nameOvClose(true)">Zapisz plan</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -598,6 +616,7 @@ function bodySVG(prim, sec){
    STAN + ZAPIS DANYCH
    ============================================================ */
 const exById = id => EX.find(e=>e.id===id);
+const planById = id => PLANS.find(p=>p.id===id) || DB.myplans.find(p=>p.id===id);
 let DB = { sessions: [] };          // historia treningów
 let storageOK = true;
 let session = null;                  // aktywny trening
@@ -616,6 +635,7 @@ async function loadDB(){
   /* migracja starszych danych */
   DB.sessions = DB.sessions || [];
   DB.weights  = DB.weights  || [];
+  DB.myplans  = DB.myplans  || [];
   DB.profile  = DB.profile  || {goal:'', height:'', age:'', sex:'', activity:''};
 }
 
@@ -975,11 +995,15 @@ function renderStart(){
     : `Masz za sobą ${n} ${n===1?'trening':(n<5?'treningi':'treningów')}. Czas na kolejny.`;
   let h = `<p style="color:var(--dim);font-size:.9rem;line-height:1.5;margin:6px 2px 4px">${hello}</p>`;
   h += `<div class="h2">Plany treningowe</div>`;
+  const groups = DB.myplans.length ? [PLAN_GROUPS[0], {id:'moje',label:'Moje'}, ...PLAN_GROUPS.slice(1)] : PLAN_GROUPS;
   h += `<div class="chiprow">` +
-    PLAN_GROUPS.map(g=>`<button class="chip ${planFilter===g.id?'on':''}" onclick="planFilter='${g.id}';renderStart()">${g.label}</button>`).join('') +
+    groups.map(g=>`<button class="chip ${planFilter===g.id?'on':''}" onclick="planFilter='${g.id}';renderStart()">${g.label}</button>`).join('') +
     `</div>`;
   h += `<div class="plan-grid">`;
-  const shown = PLANS.filter(p => planFilter==='wszystkie' || PLAN_GROUP_OF[p.id]===planFilter);
+  const all = [...DB.myplans, ...PLANS];
+  const shown = all.filter(p => planFilter==='wszystkie'
+    || (planFilter==='moje' && p.mine)
+    || PLAN_GROUP_OF[p.id]===planFilter);
   for(const p of shown){
     h += `<button class="plan-card" onclick="openPlan('${p.id}')">
       <span class="pc-bar" style="background:${p.color}"></span>
@@ -1000,17 +1024,28 @@ function renderStart(){
 
 /* --- podgląd planu --- */
 function openPlan(pid){
-  const p = PLANS.find(x=>x.id===pid);
+  const p = planById(pid);
+  if(!p) return;
   $('#planTitle').textContent = p.name;
   let h = `<p style="color:var(--dim);font-size:.9rem;line-height:1.55;margin-bottom:14px">${p.desc}</p>`;
   h += `<div class="h2">Ćwiczenia</div>`;
   for(const id of p.ex){
     const e = exById(id);
-    h += exRowHTML(e);
+    if(e) h += exRowHTML(e);
   }
   h += `<button class="btn btn-red" style="margin-top:16px" onclick="startWorkout('${p.id}')">Rozpocznij trening</button>`;
+  if(p.mine) h += `<button class="btn btn-ghost" style="margin-top:10px" onclick="delMyPlan('${p.id}')">Usuń ten plan</button>`;
   $('#planBody').innerHTML = h;
   openSheet('shPlan');
+}
+function delMyPlan(pid){
+  askConfirm('Usunąć ten plan? Historia treningów zostaje.', 'Usuń', async ()=>{
+    DB.myplans = DB.myplans.filter(p=>p.id!==pid);
+    await saveDB();
+    closeSheet('shPlan');
+    render();
+    toast('Plan usunięty');
+  });
 }
 
 function exRowHTML(e){
@@ -1080,15 +1115,26 @@ function openCustom(){
         <label for="pk_${e.id}">${e.name}<br><small>${e.eq}</small></label></div>`;
     }
   }
-  h += `<button class="btn btn-red" style="margin-top:16px" id="customGo" onclick="startCustom()" disabled>Wybierz ćwiczenia</button>`;
+  h += `<button class="btn btn-red" style="margin-top:16px" id="customGo" onclick="startCustom()" disabled>Wybierz ćwiczenia</button>
+       <button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" id="customSave" onclick="saveCustomAsPlan()" disabled>Zapisz jako mój plan</button>`;
   $('#customBody').innerHTML = h;
   openSheet('shCustom');
+}
+function saveCustomAsPlan(){
+  if(!customSel.size) return;
+  const ids = [...customSel];
+  openNameOv('', async name=>{
+    await saveMyPlan(name, ids);
+    closeSheet('shCustom');
+    render();
+  });
 }
 function togglePick(id, on){
   on ? customSel.add(id) : customSel.delete(id);
   const b = $('#customGo');
   b.disabled = customSel.size===0;
   b.textContent = customSel.size ? `Rozpocznij (${customSel.size} ćw.)` : 'Wybierz ćwiczenia';
+  $('#customSave').disabled = customSel.size===0;
 }
 function startCustom(){
   if(!customSel.size) return;
@@ -1099,24 +1145,25 @@ function startCustom(){
 /* ============================================================
    AKTYWNY TRENING
    ============================================================ */
-function startWorkout(planId, exIds){
+function makeWoEx(id){
+  const last = lastSetsFor(id);
+  const n = last ? last.length : 3;
+  return { id, sets: Array.from({length:n},(_,i)=>({w:'',r:'',done:false,prev:last?last[i]:null})) };
+}
+function startWorkout(planId, exIds, name){
   if(session){
     askConfirm('Masz już trwający trening. Zacząć nowy i porzucić tamten?', 'Zacznij nowy', ()=>{
       endSession();
-      startWorkout(planId, exIds);
+      startWorkout(planId, exIds, name);
     });
     return;
   }
-  const p = planId ? PLANS.find(x=>x.id===planId) : null;
+  const p = planId ? planById(planId) : null;
   const ids = p ? p.ex : exIds;
   session = {
-    planName: p ? p.name : 'Własny',
+    planName: p ? p.name : (name || 'Własny'),
     start: Date.now(),
-    ex: ids.map(id=>{
-      const last = lastSetsFor(id);
-      const n = last ? last.length : 3;
-      return { id, sets: Array.from({length:n},(_,i)=>({w:'',r:'',done:false,prev:last?last[i]:null})) };
-    })
+    ex: ids.map(makeWoEx)
   };
   closeSheet('shPlan');
   renderWorkout();
@@ -1151,9 +1198,38 @@ function renderWorkout(){
     });
     h += `<button class="addset" onclick="addSet(${ei})">+ dodaj serię</button></div>`;
   });
+  h += `<button class="addset" style="margin-bottom:14px;padding:13px;color:var(--chalk)" onclick="openAddEx()">＋ Dodaj ćwiczenie do treningu</button>`;
   h += `<button class="btn btn-green" style="margin-top:6px" onclick="finishWorkout()">Zakończ trening</button>
         <button class="btn btn-ghost" style="margin-top:10px" onclick="askQuit(true)">Porzuć bez zapisu</button>`;
   $('#woBody').innerHTML = h;
+}
+
+/* dokładanie ćwiczenia w trakcie treningu */
+let addExQ = '';
+function openAddEx(){
+  addExQ = '';
+  $('#addExBody').innerHTML = `<input class="search" placeholder="Szukaj ćwiczenia…" oninput="addExQ=this.value;renderAddExList()">
+    <div id="addExList"></div>`;
+  renderAddExList();
+  openSheet('shAddEx');
+}
+function renderAddExList(){
+  const inWo = new Set(session ? session.ex.map(e=>e.id) : []);
+  const q = addExQ.trim().toLowerCase();
+  const list = EX.filter(e => !inWo.has(e.id) && (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
+  $('#addExList').innerHTML = list.length
+    ? list.map(e=>`<button class="exrow" onclick="addExToSession('${e.id}')">
+        <div class="xr-body"><div class="xr-name">${e.name}</div>
+        <div class="xr-sub"><span class="cat-${e.cat}" style="font-weight:700;text-transform:uppercase;font-size:.68rem;letter-spacing:.05em">${e.cat}</span> · ${e.eq}</div></div>
+        <div style="color:var(--green);font-weight:900;font-size:1.2rem">＋</div></button>`).join('')
+    : `<div class="empty">Nic nie znaleziono albo wszystko już jest w treningu.</div>`;
+}
+function addExToSession(id){
+  if(!session) return;
+  session.ex.push(makeWoEx(id));
+  closeSheet('shAddEx');
+  renderWorkout();
+  toast(exById(id).name + ' — dodane');
 }
 
 function setVal(ei,si,k,v){ session.ex[ei].sets[si][k] = v; }
@@ -1314,9 +1390,54 @@ function openSess(idx){
         <span>Seria ${i+1}</span><b style="color:var(--chalk)">${st.w>0? st.w+' kg × '+st.r : st.r+' powt.'}</b></div>`).join('') +
       `</div></div>`;
   }
+  h += `<button class="btn btn-red" style="margin-top:14px" onclick="repeatSess(${idx})">↻ Powtórz ten trening</button>`;
+  h += `<button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" onclick="saveSessAsPlan(${idx})">Zapisz jako mój plan</button>`;
   h += `<button class="btn btn-ghost" style="margin-top:10px" onclick="delSess(${idx})">Usuń tę sesję</button>`;
   $('#sessBody').innerHTML = h;
   openSheet('shSess');
+}
+function repeatSess(idx){
+  const s = DB.sessions[idx];
+  const ids = s.exercises.map(e=>e.id).filter(id=>exById(id));
+  if(!ids.length){ toast('Brak ćwiczeń do powtórzenia'); return; }
+  closeSheet('shSess');
+  startWorkout(null, ids, s.plan);
+}
+
+/* zapis zestawu ćwiczeń jako własny plan */
+let _nameCb = null;
+function openNameOv(prefill, cb){
+  $('#nameIn').value = prefill || '';
+  _nameCb = cb;
+  const ov = $('#nameOv'); ov.style.zIndex = ++zTop; ov.classList.add('on');
+  setTimeout(()=>$('#nameIn').focus(), 60);
+}
+async function nameOvClose(save){
+  if(save){
+    const name = $('#nameIn').value.trim();
+    if(!name){ toast('Wpisz nazwę planu'); return; }
+    const cb = _nameCb;
+    $('#nameOv').classList.remove('on'); _nameCb = null;
+    if(cb) await cb(name);
+    return;
+  }
+  $('#nameOv').classList.remove('on'); _nameCb = null;
+}
+async function saveMyPlan(name, ids){
+  DB.myplans.push({
+    id: 'my'+Date.now(), mine: true,
+    name, tag: 'Mój plan', color: 'var(--chalk)',
+    desc: 'Twój własny plan. Znajdziesz go na ekranie startowym w grupie „Moje".',
+    ex: ids
+  });
+  await saveDB();
+  toast('Plan „'+name+'" zapisany');
+}
+function saveSessAsPlan(idx){
+  const s = DB.sessions[idx];
+  const ids = s.exercises.map(e=>e.id).filter(id=>exById(id));
+  if(!ids.length){ toast('Brak ćwiczeń do zapisania'); return; }
+  openNameOv(s.plan==='Własny'?'':s.plan, async name=>{ await saveMyPlan(name, ids); });
 }
 async function delSess(idx){
   askConfirm('Usunąć tę sesję z historii?', 'Usuń', async ()=>{
