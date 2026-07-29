@@ -220,7 +220,7 @@ nav button.on .ni{color:var(--red)}
 </head>
 <body>
 <header>
-  <div class="logo">PRO<em>GRES</em></div>
+  <button class="logo" onclick="goTab('pulpit')" aria-label="Strona główna" style="letter-spacing:.06em">PRO<em>GRES</em></button>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="hdr-date" id="hdrDate"></div>
     <button class="backbtn" style="width:34px;height:34px;font-weight:900;color:var(--yellow)" onclick="openSheet('shHelp')" aria-label="Instrukcja obsługi">?</button>
@@ -628,7 +628,7 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const APP_VER = 'v13';
+const APP_VER = 'v14';
 const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
 const allEx = () => [...EX, ...(DB.myex||[])];
 const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
@@ -1012,7 +1012,7 @@ function renderStart(){
     : `Masz za sobą ${n} ${n===1?'trening':(n<5?'treningi':'treningów')}. Czas na kolejny.`;
   let h = `<p style="color:var(--dim);font-size:.9rem;line-height:1.5;margin:6px 2px 4px">${hello}</p>`;
   h += `<div class="h2">Plany treningowe</div>`;
-  const groups = DB.myplans.length ? [PLAN_GROUPS[0], {id:'moje',label:'Moje'}, ...PLAN_GROUPS.slice(1)] : PLAN_GROUPS;
+  const groups = DB.myplans.length ? [PLAN_GROUPS[0], {id:'moje',label:'Własne'}, ...PLAN_GROUPS.slice(1)] : PLAN_GROUPS;
   h += `<div class="chiprow">` +
     groups.map(g=>`<button class="chip ${planFilter===g.id?'on':''}" onclick="planFilter='${g.id}';renderStart()">${g.label}</button>`).join('') +
     `</div>`;
@@ -1084,7 +1084,7 @@ function renderBaza(){
   h += `<input class="search" placeholder="Szukaj ćwiczenia…" value="${esc(bazaQ)}"
     oninput="bazaQ=this.value;renderBazaList()">`;
   h += `<div class="chiprow">` +
-    ['wszystkie',...CATS].map(c=>`<button class="chip ${bazaCat===c?'on':''}" onclick="bazaCat='${c}';renderBaza()">${c}</button>`).join('') +
+    ['wszystkie','własne',...CATS].map(c=>`<button class="chip ${bazaCat===c?'on':''}" onclick="bazaCat='${c}';renderBaza()">${c}</button>`).join('') +
     `</div><div id="bazaList"></div>`;
   $('#main').innerHTML = h;
   renderBazaList();
@@ -1092,8 +1092,12 @@ function renderBaza(){
 function renderBazaList(){
   const q = bazaQ.trim().toLowerCase();
   const list = allEx().filter(e =>
-    (bazaCat==='wszystkie'||e.cat===bazaCat) &&
+    (bazaCat==='wszystkie' || (bazaCat==='własne' ? e.mine : e.cat===bazaCat)) &&
     (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
+  if(bazaCat==='własne' && !list.length){
+    $('#bazaList').innerHTML = `<div class="empty"><span class="e-big">✎</span>Nie masz jeszcze własnych ćwiczeń.<br>Dodasz je przyciskiem u góry.</div>`;
+    return;
+  }
   $('#bazaList').innerHTML = list.length
     ? list.map(exRowHTML).join('')
     : `<div class="empty"><span class="e-big">🔍</span>Nic nie znaleziono.<br>Zmień frazę albo kategorię.</div>`;
