@@ -930,7 +930,7 @@ function openSettings(){
       <div style="font-size:.7rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:10px">Sprawdź na swoim telefonie</div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-ghost" style="flex:1;padding:12px" onclick="beep()">Testuj dźwięk</button>
-        <button class="btn btn-ghost" style="flex:1;padding:12px" onclick="vibrate([300,120,300]);toast('Wysłano wibrację')">Testuj wibrację</button>
+        <button class="btn btn-ghost" style="flex:1;padding:12px" onclick="vibrate([600,150,600,150,600]);toast('Wysłano wibrację')">Testuj wibrację</button>
       </div>
       <p style="color:var(--dim);font-size:.78rem;line-height:1.5;margin-top:10px">Jeśli test wibracji nic nie robi mimo włączonej opcji, sprawdź w telefonie: Ustawienia → Dźwięk i wibracja → „Wibracja przy dotyku" / intensywność wibracji, oraz czy nie działa tryb Nie przeszkadzać.</p>
     </div>`;
@@ -1180,7 +1180,7 @@ function startRest(sec){
 function tickRest(){
   restLeft = Math.max(0, Math.ceil((restEndAt - Date.now())/1000));
   if(restLeft<=0){
-    timerStop(); beep(); vibrate([300,120,300]);
+    timerStop(); beep(); vibrate([600,150,600,150,600]);
     toast('Przerwa skończona — działamy!');
     return;
   }
