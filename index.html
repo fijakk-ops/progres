@@ -285,6 +285,13 @@ nav button.on .ni{color:var(--red)}
 
     <div class="tipbox"><b>Złota zasada:</b> zapisuj serie od razu po ich zrobieniu, nie z pamięci po treningu. Timer przerwy robi to za Ciebie — odhaczasz serię, odpoczywasz, działasz dalej.</div>
 
+    <div class="h2">5 · Własne ćwiczenia i plany</div>
+    <ol class="steps">
+      <li>W zakładce <b>Ćwiczenia</b> przycisk <b>＋ Dodaj własne ćwiczenie</b> — wypełniasz nazwę, kategorię, sprzęt, zaznaczasz mięśnie na liście i opisujesz technikę (każda linia = jeden krok). Własne ćwiczenia działają jak wbudowane: mapa mięśni, rekordy, plany.</li>
+      <li>Własne ćwiczenie możesz potem <b>edytować lub usunąć</b> z poziomu jego szczegółów.</li>
+      <li>Plany zapisujesz z kreatora „Własny" albo z Historii („Zapisz jako mój plan"). W podglądzie swojego planu masz <b>✎ Edytuj plan</b> — zmieniasz zestaw i nazwę.</li>
+    </ol>
+
     <button class="btn btn-red" style="margin-top:16px" onclick="closeSheet('shHelp')">Jasne, do roboty</button>
   </div>
 </div>
@@ -318,6 +325,12 @@ nav button.on .ni{color:var(--red)}
 <div class="sheet" id="shCustom">
   <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shCustom')">←</button><div class="sh-title">Własny trening</div></div>
   <div class="sheet-bd" id="customBody"></div>
+</div>
+
+<!-- arkusz: formularz własnego ćwiczenia -->
+<div class="sheet" id="shExForm">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shExForm')">←</button><div class="sh-title" id="exFormTitle">Własne ćwiczenie</div></div>
+  <div class="sheet-bd" id="exFormBody"></div>
 </div>
 
 <!-- arkusz: dodaj ćwiczenie do treningu -->
@@ -615,8 +628,10 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const exById = id => EX.find(e=>e.id===id);
-const planById = id => PLANS.find(p=>p.id===id) || DB.myplans.find(p=>p.id===id);
+const APP_VER = 'v13';
+const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
+const allEx = () => [...EX, ...(DB.myex||[])];
+const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
 let DB = { sessions: [] };          // historia treningów
 let storageOK = true;
 let session = null;                  // aktywny trening
@@ -636,6 +651,7 @@ async function loadDB(){
   DB.sessions = DB.sessions || [];
   DB.weights  = DB.weights  || [];
   DB.myplans  = DB.myplans  || [];
+  DB.myex     = DB.myex     || [];
   DB.profile  = DB.profile  || {goal:'', height:'', age:'', sex:'', activity:''};
 }
 
@@ -930,6 +946,7 @@ function renderProfil(){
     h += `<p style="color:var(--dim);font-size:.85rem">Brak pomiarów. Waż się rano, na czczo, 1–3 razy w tygodniu — pojedynczy pomiar skacze, trend mówi prawdę.</p>`;
   }
   h += `</div>`;
+  h += `<p style="text-align:center;color:var(--dim);font-size:.75rem;margin-top:20px;letter-spacing:.06em">PROGRES · wersja ${APP_VER}</p>`;
   $('#main').innerHTML = h;
 }
 async function setProfile(k,v){ DB.profile[k]=v; await saveDB(); if(view==='profil' && !$('#shSettings').classList.contains('open')) renderProfil(); }
@@ -1034,7 +1051,8 @@ function openPlan(pid){
     if(e) h += exRowHTML(e);
   }
   h += `<button class="btn btn-red" style="margin-top:16px" onclick="startWorkout('${p.id}')">Rozpocznij trening</button>`;
-  if(p.mine) h += `<button class="btn btn-ghost" style="margin-top:10px" onclick="delMyPlan('${p.id}')">Usuń ten plan</button>`;
+  if(p.mine) h += `<button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" onclick="openCustom('${p.id}')">✎ Edytuj plan</button>
+    <button class="btn btn-ghost" style="margin-top:10px" onclick="delMyPlan('${p.id}')">Usuń ten plan</button>`;
   $('#planBody').innerHTML = h;
   openSheet('shPlan');
 }
@@ -1053,7 +1071,7 @@ function exRowHTML(e){
   return `<button class="exrow" onclick="openEx('${e.id}')">
     <div class="xr-body">
       <div class="xr-name">${e.name}</div>
-      <div class="xr-sub"><span class="cat-${e.cat}" style="font-weight:700;text-transform:uppercase;font-size:.68rem;letter-spacing:.05em">${e.cat}</span> · ${e.eq}</div>
+      <div class="xr-sub"><span class="cat-${e.cat}" style="font-weight:700;text-transform:uppercase;font-size:.68rem;letter-spacing:.05em">${e.cat}</span> · ${e.eq}${e.mine?' · <span style="color:var(--yellow);font-weight:700">własne</span>':''}</div>
     </div>
     ${best?`<div class="xr-pr">${best.w>0?best.w+' kg':best.r+' powt.'}</div>`:'<div style="color:var(--dim)">›</div>'}
   </button>`;
@@ -1062,8 +1080,9 @@ function exRowHTML(e){
 /* --- BAZA ĆWICZEŃ --- */
 let bazaCat = 'wszystkie', bazaQ = '';
 function renderBaza(){
-  let h = `<input class="search" placeholder="Szukaj ćwiczenia…" value="${esc(bazaQ)}"
-    oninput="bazaQ=this.value;renderBazaList()" style="margin-top:8px">`;
+  let h = `<button class="addset" style="margin-top:10px;margin-bottom:10px;padding:13px;color:var(--chalk)" onclick="openExForm()">＋ Dodaj własne ćwiczenie</button>`;
+  h += `<input class="search" placeholder="Szukaj ćwiczenia…" value="${esc(bazaQ)}"
+    oninput="bazaQ=this.value;renderBazaList()">`;
   h += `<div class="chiprow">` +
     ['wszystkie',...CATS].map(c=>`<button class="chip ${bazaCat===c?'on':''}" onclick="bazaCat='${c}';renderBaza()">${c}</button>`).join('') +
     `</div><div id="bazaList"></div>`;
@@ -1072,7 +1091,7 @@ function renderBaza(){
 }
 function renderBazaList(){
   const q = bazaQ.trim().toLowerCase();
-  const list = EX.filter(e =>
+  const list = allEx().filter(e =>
     (bazaCat==='wszystkie'||e.cat===bazaCat) &&
     (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
   $('#bazaList').innerHTML = list.length
@@ -1092,7 +1111,11 @@ function openEx(id){
     e.sec.map(m=>`<span class="chip" style="margin:0 4px 6px 0">${MUSCLE_PL[m]}</span>`).join('') + `</div>`;
   h += `<div class="card" style="font-size:.82rem;color:var(--dim)">Sprzęt: <b style="color:var(--chalk)">${e.eq}</b></div>`;
   h += `<div class="h2">Technika</div><ol class="steps">${e.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`;
-  h += `<div class="tipbox"><b>Wskazówka:</b> ${e.tip}</div>`;
+  if(e.tip) h += `<div class="tipbox"><b>Wskazówka:</b> ${e.tip}</div>`;
+  if(e.mine) h += `<div style="display:flex;gap:10px;margin-top:14px">
+    <button class="btn btn-ghost" style="flex:1;padding:12px" onclick="openExForm('${e.id}')">✎ Edytuj</button>
+    <button class="btn btn-ghost" style="flex:1;padding:12px;border-color:var(--red);color:var(--red)" onclick="delMyEx('${e.id}')">Usuń</button>
+  </div>`;
   if(best||last){
     h += `<div class="statline">`;
     if(best) h += `<div class="statbox"><div class="sb-v" style="color:var(--yellow)">${best.w>0?best.w+' kg × '+best.r:best.r+' powt.'}</div><div class="sb-l">Twój rekord</div></div>`;
@@ -1103,26 +1126,42 @@ function openEx(id){
   openSheet('shEx');
 }
 
-/* --- WŁASNY TRENING --- */
-let customSel = new Set();
-function openCustom(){
-  customSel = new Set();
-  let h = `<p style="color:var(--dim);font-size:.88rem;margin-bottom:10px">Zaznacz ćwiczenia w kolejności, w jakiej chcesz je robić.</p>`;
+/* --- WŁASNY TRENING / EDYCJA PLANU --- */
+let customSel = new Set(), editingPlanId = null;
+function openCustom(editPid){
+  editingPlanId = editPid || null;
+  const plan = editPid ? planById(editPid) : null;
+  customSel = new Set(plan ? plan.ex.filter(id=>exById(id)) : []);
+  let h = `<p style="color:var(--dim);font-size:.88rem;margin-bottom:10px">${plan
+    ? 'Edytujesz plan „'+esc(plan.name)+'" — zmień zestaw ćwiczeń i zapisz.'
+    : 'Zaznacz ćwiczenia w kolejności, w jakiej chcesz je robić.'}</p>`;
   for(const c of CATS){
     h += `<div class="h2">${c}</div>`;
-    for(const e of EX.filter(x=>x.cat===c)){
-      h += `<div class="pickrow"><input type="checkbox" id="pk_${e.id}" onchange="togglePick('${e.id}',this.checked)">
-        <label for="pk_${e.id}">${e.name}<br><small>${e.eq}</small></label></div>`;
+    for(const e of allEx().filter(x=>x.cat===c)){
+      h += `<div class="pickrow"><input type="checkbox" id="pk_${e.id}" ${customSel.has(e.id)?'checked':''} onchange="togglePick('${e.id}',this.checked)">
+        <label for="pk_${e.id}">${e.name}${e.mine?' <small style="color:var(--yellow)">własne</small>':''}<br><small>${e.eq}</small></label></div>`;
     }
   }
-  h += `<button class="btn btn-red" style="margin-top:16px" id="customGo" onclick="startCustom()" disabled>Wybierz ćwiczenia</button>
-       <button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" id="customSave" onclick="saveCustomAsPlan()" disabled>Zapisz jako mój plan</button>`;
+  h += `<button class="btn btn-red" style="margin-top:16px" id="customGo" onclick="startCustom()" ${customSel.size?'':'disabled'}>${customSel.size?`Rozpocznij (${customSel.size} ćw.)`:'Wybierz ćwiczenia'}</button>
+       <button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" id="customSave" onclick="saveCustomAsPlan()" ${customSel.size?'':'disabled'}>${plan?'Zapisz zmiany w planie':'Zapisz jako mój plan'}</button>`;
   $('#customBody').innerHTML = h;
   openSheet('shCustom');
 }
 function saveCustomAsPlan(){
   if(!customSel.size) return;
   const ids = [...customSel];
+  if(editingPlanId){
+    const p = planById(editingPlanId);
+    openNameOv(p.name, async name=>{
+      p.name = name; p.ex = ids;
+      await saveDB();
+      editingPlanId = null;
+      closeSheet('shCustom'); closeSheet('shPlan');
+      render();
+      toast('Plan „'+name+'" zaktualizowany');
+    });
+    return;
+  }
   openNameOv('', async name=>{
     await saveMyPlan(name, ids);
     closeSheet('shCustom');
@@ -1159,7 +1198,8 @@ function startWorkout(planId, exIds, name){
     return;
   }
   const p = planId ? planById(planId) : null;
-  const ids = p ? p.ex : exIds;
+  const ids = (p ? p.ex : exIds).filter(id=>exById(id));
+  if(!ids.length){ toast('Ten plan nie ma dostępnych ćwiczeń'); return; }
   session = {
     planName: p ? p.name : (name || 'Własny'),
     start: Date.now(),
@@ -1216,7 +1256,7 @@ function openAddEx(){
 function renderAddExList(){
   const inWo = new Set(session ? session.ex.map(e=>e.id) : []);
   const q = addExQ.trim().toLowerCase();
-  const list = EX.filter(e => !inWo.has(e.id) && (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
+  const list = allEx().filter(e => !inWo.has(e.id) && (!q || e.name.toLowerCase().includes(q) || e.cat.includes(q)));
   $('#addExList').innerHTML = list.length
     ? list.map(e=>`<button class="exrow" onclick="addExToSession('${e.id}')">
         <div class="xr-body"><div class="xr-name">${e.name}</div>
@@ -1230,6 +1270,77 @@ function addExToSession(id){
   closeSheet('shAddEx');
   renderWorkout();
   toast(exById(id).name + ' — dodane');
+}
+
+/* ============================================================
+   WŁASNE ĆWICZENIA — formularz (te same pola co baza wbudowana)
+   ============================================================ */
+let editingExId = null;
+function openExForm(editId){
+  editingExId = editId || null;
+  const e = editId ? exById(editId) : null;
+  $('#exFormTitle').textContent = e ? 'Edytuj ćwiczenie' : 'Własne ćwiczenie';
+  const mgrid = (name, sel) => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">` +
+    Object.entries(MUSCLE_PL).map(([k,l])=>`<div class="pickrow" style="padding:7px 2px">
+      <input type="checkbox" id="${name}_${k}" ${sel && sel.includes(k)?'checked':''}>
+      <label for="${name}_${k}" style="font-size:.85rem">${l}</label></div>`).join('') + `</div>`;
+  $('#exFormBody').innerHTML = `
+    <div class="card">
+      <div class="frm"><label>Nazwa ćwiczenia *</label>
+        <input type="text" id="xfName" maxlength="48" placeholder="np. Wiosłowanie na maszynie" value="${e?esc(e.name):''}"></div>
+      <div class="frm-grid">
+        <div class="frm"><label>Kategoria *</label>
+          <select id="xfCat">${CATS.map(c=>`<option value="${c}" ${e&&e.cat===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="frm"><label>Sprzęt</label>
+          <input type="text" id="xfEq" maxlength="40" placeholder="np. maszyna, hantle" value="${e?esc(e.eq):''}"></div>
+      </div>
+    </div>
+    <div class="h2">Mięśnie główne *</div><div class="card">${mgrid('xfp', e?e.prim:null)}</div>
+    <div class="h2">Mięśnie pomocnicze</div><div class="card">${mgrid('xfs', e?e.sec:null)}</div>
+    <div class="h2">Technika — krok po kroku *</div>
+    <div class="card"><div class="frm" style="margin-bottom:0">
+      <textarea id="xfSteps" rows="6" style="background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--chalk);font-size:.95rem;font-family:inherit;line-height:1.5;resize:vertical"
+        placeholder="Każdy krok w osobnej linii, np.:&#10;Usiądź na maszynie, klatka oparta o poduszkę.&#10;Przyciągnij uchwyty do żeber.&#10;Wracaj wolno do wyprostu ramion.">${e?esc(e.steps.join('\n')):''}</textarea>
+      <p style="color:var(--dim);font-size:.78rem;margin-top:6px">Każda linia stanie się osobnym, numerowanym krokiem — tak jak w ćwiczeniach wbudowanych.</p></div></div>
+    <div class="h2">Wskazówka</div>
+    <div class="card"><div class="frm" style="margin-bottom:0">
+      <input type="text" id="xfTip" maxlength="160" placeholder="np. Nie szarp — ruch ma być kontrolowany (opcjonalnie)" value="${e&&e.tip?esc(e.tip):''}"></div></div>
+    <button class="btn btn-green" style="margin-top:14px" onclick="saveExForm()">${e?'Zapisz zmiany':'Dodaj ćwiczenie'}</button>`;
+  openSheet('shExForm');
+}
+async function saveExForm(){
+  const name = $('#xfName').value.trim();
+  const cat = $('#xfCat').value;
+  const eq = $('#xfEq').value.trim() || 'masa ciała';
+  const prim = Object.keys(MUSCLE_PL).filter(k=>$('#xfp_'+k).checked);
+  const sec = Object.keys(MUSCLE_PL).filter(k=>$('#xfs_'+k).checked && !prim.includes(k));
+  const steps = $('#xfSteps').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const tip = $('#xfTip').value.trim();
+  if(!name){ toast('Podaj nazwę ćwiczenia'); return; }
+  if(!prim.length){ toast('Zaznacz min. 1 mięsień główny'); return; }
+  if(!steps.length){ toast('Opisz technikę — min. 1 krok'); return; }
+  if(editingExId){
+    const e = exById(editingExId);
+    Object.assign(e, {name, cat, eq, prim, sec, steps, tip});
+  } else {
+    DB.myex.push({id:'mx'+Date.now(), mine:true, name, cat, eq, prim, sec, steps, tip});
+  }
+  await saveDB();
+  const wasEdit = editingExId; editingExId = null;
+  closeSheet('shExForm');
+  if(wasEdit){ closeSheet('shEx'); openEx(wasEdit); }
+  if(view==='baza') renderBaza();
+  toast(wasEdit ? 'Ćwiczenie zaktualizowane' : 'Ćwiczenie „'+name+'" dodane do bazy');
+}
+function delMyEx(id){
+  askConfirm('Usunąć to ćwiczenie? Zniknie też z Twoich planów. Wpisy w historii zostaną.', 'Usuń', async ()=>{
+    DB.myex = DB.myex.filter(e=>e.id!==id);
+    DB.myplans.forEach(p=>{ p.ex = p.ex.filter(x=>x!==id); });
+    await saveDB();
+    closeSheet('shEx');
+    render();
+    toast('Ćwiczenie usunięte');
+  });
 }
 
 function setVal(ei,si,k,v){ session.ex[ei].sets[si][k] = v; }
