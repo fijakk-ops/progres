@@ -1320,13 +1320,12 @@ function endSession(){
 }
 
 async function finishWorkout(){
-  const exDone = session.ex
-    .map(we=>({id:we.id, sets:we.sets.filter(s=>s.done).map(s=>({w:+s.w||0, r:+s.r||0}))}))
-    .filter(e=>e.sets.length);
-  if(!exDone.length){ toast('Zalicz choć jedną serię (✓)'); return; }
+  const exAll = session.ex
+    .map(we=>({id:we.id, sets:we.sets.filter(s=>s.done).map(s=>({w:+s.w||0, r:+s.r||0}))}));
+  if(!exAll.some(e=>e.sets.length)){ toast('Zalicz choć jedną serię (✓)'); return; }
   const dur = Math.floor((Date.now()-session.start)/1000);
-  const vol = exDone.reduce((a,e)=>a+e.sets.reduce((x,s)=>x+s.w*s.r,0),0);
-  DB.sessions.push({date:new Date().toISOString(), plan:session.planName, dur, vol, exercises:exDone});
+  const vol = exAll.reduce((a,e)=>a+e.sets.reduce((x,s)=>x+s.w*s.r,0),0);
+  DB.sessions.push({date:new Date().toISOString(), plan:session.planName, dur, vol, exercises:exAll});
   await saveDB();
   endSession();
   closeSheet('shWo');
@@ -1384,11 +1383,16 @@ function openSess(idx){
   </div>`;
   for(const e of s.exercises){
     const x = exById(e.id);
-    h += `<div class="card"><div style="font-weight:800;margin-bottom:8px">${x?x.name:e.id}</div>
-      <div style="color:var(--dim);font-size:.9rem;font-variant-numeric:tabular-nums">` +
+    h += `<div class="card"><div style="font-weight:800;margin-bottom:8px">${x?x.name:e.id}</div>`;
+    if(e.sets.length){
+      h += `<div style="color:var(--dim);font-size:.9rem;font-variant-numeric:tabular-nums">` +
       e.sets.map((st,i)=>`<div style="display:flex;justify-content:space-between;padding:3px 0">
         <span>Seria ${i+1}</span><b style="color:var(--chalk)">${st.w>0? st.w+' kg × '+st.r : st.r+' powt.'}</b></div>`).join('') +
-      `</div></div>`;
+      `</div>`;
+    } else {
+      h += `<div style="color:var(--dim);font-size:.85rem">Pominięte — bez zaliczonych serii</div>`;
+    }
+    h += `</div>`;
   }
   h += `<button class="btn btn-red" style="margin-top:14px" onclick="repeatSess(${idx})">↻ Powtórz ten trening</button>`;
   h += `<button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" onclick="saveSessAsPlan(${idx})">Zapisz jako mój plan</button>`;
