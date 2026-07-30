@@ -628,7 +628,7 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const APP_VER = 'v15';
+const APP_VER = 'v16';
 const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
 const allEx = () => [...EX, ...(DB.myex||[])];
 const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
@@ -1031,7 +1031,7 @@ function renderStart(){
   h += `<button class="plan-card custom" onclick="openCustom()">
       <span class="pc-name">Własny</span>
       <span class="pc-tag">Sam wybierasz ćwiczenia</span>
-      <span class="pc-n">z bazy ${EX.length} ćwiczeń</span></button>`;
+      <span class="pc-n">oficjalna baza: ${EX.length}${DB.myex.length?` · własne: ${DB.myex.length}`:''}</span></button>`;
   h += `</div>`;
   if(session){
     h = `<button class="btn btn-red" style="margin-top:10px" onclick="openSheet('shWo')">▶ Wróć do trwającego treningu</button>` + h;
