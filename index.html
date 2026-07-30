@@ -628,7 +628,7 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const APP_VER = 'v16';
+const APP_VER = 'v17';
 const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
 const allEx = () => [...EX, ...(DB.myex||[])];
 const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
@@ -1131,25 +1131,56 @@ function openEx(id){
 }
 
 /* --- WŁASNY TRENING / EDYCJA PLANU --- */
-let customSel = new Set(), editingPlanId = null;
+let customSel = new Set(), editingPlanId = null, customCat = 'wszystkie', customQ = '';
 function openCustom(editPid){
   editingPlanId = editPid || null;
   const plan = editPid ? planById(editPid) : null;
   customSel = new Set(plan ? plan.ex.filter(id=>exById(id)) : []);
-  let h = `<p style="color:var(--dim);font-size:.88rem;margin-bottom:10px">${plan
+  customCat = 'wszystkie'; customQ = '';
+  $('#customBody').innerHTML = `<p style="color:var(--dim);font-size:.88rem;margin-bottom:10px">${plan
     ? 'Edytujesz plan „'+esc(plan.name)+'" — zmień zestaw ćwiczeń i zapisz.'
-    : 'Zaznacz ćwiczenia w kolejności, w jakiej chcesz je robić.'}</p>`;
-  for(const c of CATS){
-    h += `<div class="h2">${c}</div>`;
-    for(const e of allEx().filter(x=>x.cat===c)){
-      h += `<div class="pickrow"><input type="checkbox" id="pk_${e.id}" ${customSel.has(e.id)?'checked':''} onchange="togglePick('${e.id}',this.checked)">
-        <label for="pk_${e.id}">${e.name}${e.mine?' <small style="color:var(--yellow)">własne</small>':''}<br><small>${e.eq}</small></label></div>`;
-    }
-  }
-  h += `<button class="btn btn-red" style="margin-top:16px" id="customGo" onclick="startCustom()" ${customSel.size?'':'disabled'}>${customSel.size?`Rozpocznij (${customSel.size} ćw.)`:'Wybierz ćwiczenia'}</button>
-       <button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" id="customSave" onclick="saveCustomAsPlan()" ${customSel.size?'':'disabled'}>${plan?'Zapisz zmiany w planie':'Zapisz jako mój plan'}</button>`;
-  $('#customBody').innerHTML = h;
+    : 'Zaznacz ćwiczenia w kolejności, w jakiej chcesz je robić. Zaznaczenia nie giną przy filtrowaniu.'}</p>
+    <input class="search" placeholder="Szukaj ćwiczenia…" oninput="customQ=this.value;renderCustomList()">
+    <div class="chiprow" id="customChips"></div>
+    <div id="customList"></div>
+    <button class="btn btn-red" style="margin-top:16px" id="customGo" onclick="startCustom()"></button>
+    <button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" id="customSave" onclick="saveCustomAsPlan()">${plan?'Zapisz zmiany w planie':'Zapisz jako mój plan'}</button>`;
+  renderCustomChips();
+  renderCustomList();
+  updateCustomButtons();
   openSheet('shCustom');
+}
+function renderCustomChips(){
+  $('#customChips').innerHTML = ['wszystkie','własne',...CATS]
+    .map(c=>`<button class="chip ${customCat===c?'on':''}" onclick="customCat='${c}';renderCustomChips();renderCustomList()">${c}</button>`).join('');
+}
+function customPickRow(e){
+  return `<div class="pickrow"><input type="checkbox" id="pk_${e.id}" ${customSel.has(e.id)?'checked':''} onchange="togglePick('${e.id}',this.checked)">
+    <label for="pk_${e.id}">${e.name}${e.mine?' <small style="color:var(--yellow)">własne</small>':''}<br><small>${e.eq}</small></label></div>`;
+}
+function renderCustomList(){
+  const q = customQ.trim().toLowerCase();
+  const match = e => (customCat==='wszystkie' || (customCat==='własne' ? e.mine : e.cat===customCat))
+    && (!q || e.name.toLowerCase().includes(q));
+  let h = '';
+  if(customCat==='wszystkie' && !q){
+    for(const c of CATS){
+      const list = allEx().filter(x=>x.cat===c);
+      if(!list.length) continue;
+      h += `<div class="h2">${c}</div>` + list.map(customPickRow).join('');
+    }
+  } else {
+    const list = allEx().filter(match);
+    h = list.length ? list.map(customPickRow).join('')
+      : `<div class="empty">Nic nie znaleziono w tym filtrze.</div>`;
+  }
+  $('#customList').innerHTML = h;
+}
+function updateCustomButtons(){
+  const go = $('#customGo'), sv = $('#customSave');
+  go.disabled = customSel.size===0;
+  go.textContent = customSel.size ? `Rozpocznij (${customSel.size} ćw.)` : 'Wybierz ćwiczenia';
+  sv.disabled = customSel.size===0;
 }
 function saveCustomAsPlan(){
   if(!customSel.size) return;
@@ -1174,10 +1205,7 @@ function saveCustomAsPlan(){
 }
 function togglePick(id, on){
   on ? customSel.add(id) : customSel.delete(id);
-  const b = $('#customGo');
-  b.disabled = customSel.size===0;
-  b.textContent = customSel.size ? `Rozpocznij (${customSel.size} ćw.)` : 'Wybierz ćwiczenia';
-  $('#customSave').disabled = customSel.size===0;
+  updateCustomButtons();
 }
 function startCustom(){
   if(!customSel.size) return;
