@@ -1,6 +1,6 @@
-/* PROGRES — service worker: apka działa offline.
+/* PROGRES — service worker v19: apka działa offline.
    Po każdej zmianie w plikach podbij numer wersji, żeby telefony pobrały nową wersję. */
-const VERSION = 'zelazo-v18';
+const VERSION = 'zelazo-v19';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,9 +14,13 @@ self.addEventListener('activate', e => {
   );
 });
 
-/* najpierw sieć (aktualizacje), bez internetu — cache */
+/* tylko pliki apki i fonty — zapytania do Supabase (logowanie, dane) idą zawsze prosto do sieci */
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+  const own = url.origin === self.location.origin;
+  const fonts = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
+  if (!own && !fonts) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {

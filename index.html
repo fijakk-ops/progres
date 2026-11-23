@@ -307,6 +307,13 @@ nav button.on .ni{color:var(--red)}
       <li><b>🛒 Lista zakupów</b> sumuje składniki od wybranego dnia na 1–14 dni (domyślnie tydzień). Odhaczaj, co już kupiłeś.</li>
     </ol>
 
+    <div class="h2">7 · Konto i synchronizacja</div>
+    <ol class="steps">
+      <li>W <b>Profilu</b> → <b>Zaloguj / załóż konto</b>. Po rejestracji kliknij link w mailu, potem zaloguj się w apce tym samym hasłem.</li>
+      <li>Zalogowany na kilku urządzeniach widzisz wszędzie te same dane. Zmiany wysyłają się same chwilę po zapisie; bez internetu czekają i polecą po połączeniu.</li>
+      <li>Jeśli dane są i na urządzeniu, i w chmurze, apka zapyta: scalić, zostawić chmurę czy to urządzenie.</li>
+    </ol>
+
     <button class="btn btn-red" style="margin-top:16px" onclick="closeSheet('shHelp')">Jasne, do roboty</button>
   </div>
 </div>
@@ -347,6 +354,21 @@ nav button.on .ni{color:var(--red)}
   <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shExForm')">←</button><div class="sh-title" id="exFormTitle">Własne ćwiczenie</div></div>
   <div class="sheet-bd" id="exFormBody"></div>
 </div>
+
+<!-- arkusze: konto -->
+<div class="sheet" id="shAuth">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shAuth')">←</button><div class="sh-title">Konto</div></div>
+  <div class="sheet-bd" id="authBody"></div>
+</div>
+<div class="sheet" id="shNewPass">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shNewPass')">←</button><div class="sh-title">Nowe hasło</div></div>
+  <div class="sheet-bd">
+    <div class="card"><div class="frm" style="margin-bottom:0"><label>Nowe hasło</label>
+      <input type="password" id="npPass" autocomplete="new-password" placeholder="min. 6 znaków"></div></div>
+    <button class="btn btn-green" onclick="doNewPass()">Zapisz hasło</button>
+  </div>
+</div>
+<div class="confirm-ov" id="conflictOv"><div class="confirm-box" id="conflictBody" style="max-height:90vh;overflow-y:auto"></div></div>
 
 <!-- arkusze: dieta -->
 <div class="sheet" id="shDietSet">
@@ -661,7 +683,7 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const APP_VER = 'v18';
+const APP_VER = 'v19';
 const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
 const allEx = () => [...EX, ...(DB.myex||[])];
 const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
@@ -680,13 +702,17 @@ async function loadDB(){
       if(v) DB = JSON.parse(v);
     }
   }catch(e){ /* brak zapisu = pierwsze uruchomienie */ }
-  /* migracja starszych danych */
+  normalizeDB();
+}
+/* migracja / uzupełnienie struktury danych (też po pobraniu z chmury) */
+function normalizeDB(){
   DB.sessions = DB.sessions || [];
   DB.weights  = DB.weights  || [];
   DB.myplans  = DB.myplans  || [];
   DB.myex     = DB.myex     || [];
   DB.diet     = Object.assign({meals:4, excl:[], custom:'', start:null, planMeals:null, days:[], bought:{}, shopDays:7, dirty:false}, DB.diet||{});
   DB.profile  = DB.profile  || {goal:'', height:'', age:'', sex:'', activity:''};
+  DB.meta     = DB.meta     || {updatedAt:0};
 }
 
 /* --- waga / BMI / dieta --- */
@@ -742,6 +768,11 @@ function weightChartSVG(){
   return s + '</svg>';
 }
 async function saveDB(){
+  DB.meta.updatedAt = Date.now();
+  await saveLocal();
+  onLocalChange();
+}
+async function saveLocal(){
   try{
     if(window.storage){
       const r = await window.storage.set('zelazo-db', JSON.stringify(DB));
@@ -935,7 +966,7 @@ function renderPulpit(){
 function renderProfil(){
   const p = DB.profile;
   const opt = (v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`;
-  let h = `<div class="h2">O Tobie</div><div class="card">
+  let h = accountHTML() + `<div class="h2">O Tobie</div><div class="card">
     <div class="frm"><label>Cel</label>
       <select onchange="setProfile('goal',this.value)">
         <option value="">— wybierz —</option>
@@ -1656,7 +1687,282 @@ async function delSess(idx){
   await loadDB();
   render();
   await restoreSession();
+  await authInit();
 })();
+
+/* ============================================================
+   KONTO + SYNCHRONIZACJA (Supabase, czyste REST — bez bibliotek)
+   Klucz publishable jest publiczny z założenia; dane chroni RLS.
+   ============================================================ */
+const SB_URL = 'https://aavwrbpsbvkwbciwbyrt.supabase.co';
+const SB_KEY = 'sb_publishable_zMufzAiSHdlSdwP69enVLA_O1--KR_W';
+const APP_URL = location.origin + location.pathname;
+
+let AUTH = null;   // {access_token, refresh_token, expires_at, user:{id,email}}
+let SYNC = {lastRemote:null, dirty:false, lastSyncAt:null};
+let syncBusy = false, pushTimer = null, syncErr = '';
+
+async function authSave(){ AUTH ? await storeSet('progres-auth', AUTH) : await storeDel('progres-auth'); }
+async function syncSave(){ await storeSet('progres-sync', SYNC); }
+
+const AUTH_ERR = {
+  'Invalid login credentials':'Błędny e-mail lub hasło.',
+  'Email not confirmed':'Najpierw potwierdź e-mail linkiem z wiadomości.',
+  'User already registered':'Konto z tym e-mailem już istnieje — zaloguj się.',
+  'Password should be at least 6 characters.':'Hasło musi mieć min. 6 znaków.',
+  'Email rate limit exceeded':'Limit wysyłki maili — spróbuj za godzinę.',
+  'email rate limit exceeded':'Limit wysyłki maili — spróbuj za godzinę.'
+};
+async function sbAuth(path, body, token){
+  const res = await fetch(SB_URL+'/auth/v1/'+path, {
+    method: body===undefined ? 'GET' : (path==='user' ? 'PUT' : 'POST'),
+    headers: Object.assign({'apikey':SB_KEY,'Content-Type':'application/json'}, token?{'Authorization':'Bearer '+token}:{}),
+    body: body===undefined ? undefined : JSON.stringify(body)
+  });
+  const j = await res.json().catch(()=>({}));
+  if(!res.ok){
+    const msg = j.msg || j.error_description || j.message || ('Błąd '+res.status);
+    throw new Error(AUTH_ERR[msg] || msg);
+  }
+  return j;
+}
+function setSession(j){
+  AUTH = { access_token:j.access_token, refresh_token:j.refresh_token,
+           expires_at: Date.now() + (j.expires_in||3600)*1000,
+           user:{id:j.user.id, email:j.user.email} };
+}
+async function validToken(){
+  if(!AUTH) return null;
+  if(AUTH.expires_at - Date.now() > 60000) return AUTH.access_token;
+  try{
+    const j = await sbAuth('token?grant_type=refresh_token', {refresh_token:AUTH.refresh_token});
+    setSession(j); await authSave();
+    return AUTH.access_token;
+  }catch(e){
+    if(navigator.onLine){ AUTH = null; await authSave(); toast('Sesja wygasła — zaloguj się ponownie'); render(); }
+    return null;
+  }
+}
+async function sbRest(method, query, body, prefer){
+  const token = await validToken();
+  if(!token) throw new Error('Brak sesji');
+  const res = await fetch(SB_URL+'/rest/v1/user_data'+query, {
+    method,
+    headers: Object.assign({'apikey':SB_KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'}, prefer?{'Prefer':prefer}:{}),
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const j = await res.json().catch(()=>null);
+  if(!res.ok){
+    const m = (j && (j.message||j.code)) || ('Błąd '+res.status);
+    throw new Error(/user_data|42P01|PGRST205/.test(m) ? 'Brak tabeli user_data w Supabase — uruchom skrypt SQL.' : m);
+  }
+  return j;
+}
+
+/* --- logowanie / rejestracja / hasło --- */
+async function doLogin(){
+  const email = $('#auEmail').value.trim(), pass = $('#auPass').value;
+  if(!email || !pass){ authMsg('Podaj e-mail i hasło.'); return; }
+  authMsg('Logowanie…');
+  try{
+    setSession(await sbAuth('token?grant_type=password', {email, password:pass}));
+    await authSave();
+    SYNC = {lastRemote:null, dirty:false, lastSyncAt:null}; await syncSave();
+    closeSheet('shAuth');
+    toast('Zalogowano: '+AUTH.user.email);
+    await syncNow();
+    render();
+  }catch(e){ authMsg(e.message); }
+}
+async function doSignup(){
+  const email = $('#auEmail').value.trim(), pass = $('#auPass').value;
+  if(!email || pass.length<6){ authMsg('Podaj e-mail i hasło (min. 6 znaków).'); return; }
+  authMsg('Zakładanie konta…');
+  try{
+    const j = await sbAuth('signup?redirect_to='+encodeURIComponent(APP_URL), {email, password:pass});
+    if(j.access_token){ setSession(j); await authSave(); closeSheet('shAuth'); await syncNow(); render(); toast('Konto założone'); }
+    else authMsg('Gotowe. Kliknij link w mailu potwierdzającym, potem zaloguj się tutaj tym samym hasłem.', true);
+  }catch(e){ authMsg(e.message); }
+}
+async function doRecover(){
+  const email = $('#auEmail').value.trim();
+  if(!email){ authMsg('Wpisz e-mail, na który wyślę link do zmiany hasła.'); return; }
+  try{
+    await sbAuth('recover?redirect_to='+encodeURIComponent(APP_URL), {email});
+    authMsg('Wysłano link. Otwórz go — apka poprosi o nowe hasło.', true);
+  }catch(e){ authMsg(e.message); }
+}
+async function doNewPass(){
+  const p = $('#npPass').value;
+  if(p.length<6){ toast('Hasło musi mieć min. 6 znaków'); return; }
+  try{
+    await sbAuth('user', {password:p}, await validToken());
+    closeSheet('shNewPass'); toast('Hasło zmienione');
+  }catch(e){ toast(e.message); }
+}
+function authMsg(t, ok){ const el = $('#auMsg'); el.textContent = t; el.style.color = ok ? 'var(--green)' : 'var(--yellow)'; }
+function openAuth(){
+  $('#authBody').innerHTML = `
+    <div class="card">
+      <div class="frm"><label>E-mail</label><input type="email" id="auEmail" autocomplete="email" inputmode="email" placeholder="ty@przyklad.pl"></div>
+      <div class="frm" style="margin-bottom:0"><label>Hasło</label><input type="password" id="auPass" autocomplete="current-password" placeholder="min. 6 znaków"></div>
+    </div>
+    <p id="auMsg" style="font-size:.85rem;line-height:1.5;min-height:1.3em;margin:0 2px 10px"></p>
+    <button class="btn btn-red" onclick="doLogin()">Zaloguj</button>
+    <button class="btn btn-ghost" style="margin-top:10px;border-color:var(--chalk);color:var(--chalk)" onclick="doSignup()">Załóż konto</button>
+    <button style="display:block;margin:16px auto 0;color:var(--dim);font-size:.85rem;text-decoration:underline" onclick="doRecover()">Nie pamiętam hasła</button>
+    <p style="color:var(--dim);font-size:.78rem;line-height:1.5;margin-top:16px">Po założeniu konta przyjdzie mail z linkiem potwierdzającym. Dane z tego urządzenia nie znikną — przy pierwszej synchronizacji zdecydujesz, co z nimi zrobić.</p>`;
+  openSheet('shAuth');
+}
+async function doLogout(){
+  askConfirm('Wylogować? Dane zostaną na tym urządzeniu, ale przestaną się synchronizować.', 'Wyloguj', async ()=>{
+    const t = AUTH && AUTH.access_token;
+    AUTH = null; await authSave();
+    SYNC = {lastRemote:null, dirty:false, lastSyncAt:null}; await syncSave();
+    if(t) fetch(SB_URL+'/auth/v1/logout', {method:'POST', headers:{'apikey':SB_KEY,'Authorization':'Bearer '+t}}).catch(()=>{});
+    render(); toast('Wylogowano');
+  });
+}
+
+/* --- powrót z linku w mailu (potwierdzenie konta / zmiana hasła) --- */
+async function handleAuthHash(){
+  if(!location.hash || location.hash.length<2) return;
+  const q = new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null, '', location.pathname + location.search);
+  if(q.get('error_description')){ toast(q.get('error_description').replace(/\+/g,' ')); return; }
+  const at = q.get('access_token');
+  if(!at) return;
+  try{
+    const user = await sbAuth('user', undefined, at);
+    const prevId = AUTH && AUTH.user.id;
+    setSession({access_token:at, refresh_token:q.get('refresh_token'), expires_in:+q.get('expires_in')||3600, user});
+    await authSave();
+    if(prevId !== user.id){ SYNC = {lastRemote:null, dirty:false, lastSyncAt:null}; await syncSave(); }
+    if(q.get('type')==='recovery'){
+      $('#npPass').value = ''; openSheet('shNewPass');
+    } else toast('E-mail potwierdzony — zalogowano');
+  }catch(e){ toast('Link wygasł lub jest nieprawidłowy'); }
+}
+
+/* --- synchronizacja --- */
+const isLocalEmpty = d => !d.sessions.length && !d.weights.length && !d.myex.length && !d.myplans.length
+  && !(d.diet && d.diet.days && d.diet.days.length) && !(d.profile && d.profile.height);
+function onLocalChange(){
+  if(!AUTH) return;
+  SYNC.dirty = true; syncSave();
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(syncNow, 1500);
+}
+async function pushLocal(){
+  const rows = await sbRest('POST', '?on_conflict=user_id',
+    {user_id:AUTH.user.id, data:DB, updated_at:new Date().toISOString()},
+    'resolution=merge-duplicates,return=representation');
+  SYNC.lastRemote = rows[0].updated_at; SYNC.dirty = false; SYNC.lastSyncAt = Date.now();
+  await syncSave();
+}
+async function applyRemote(row){
+  DB = row.data; normalizeDB();
+  await saveLocal();
+  SYNC.lastRemote = row.updated_at; SYNC.dirty = false; SYNC.lastSyncAt = Date.now();
+  await syncSave();
+  dietDay = null;
+  render();
+}
+async function syncNow(){
+  if(!AUTH || syncBusy || !navigator.onLine) return;
+  syncBusy = true; syncErr = '';
+  try{
+    const rows = await sbRest('GET', '?select=data,updated_at&user_id=eq.'+AUTH.user.id);
+    const remote = rows && rows[0];
+    if(!remote){ await pushLocal(); }
+    else {
+      const remoteChanged = remote.updated_at !== SYNC.lastRemote;
+      if(remoteChanged && isLocalEmpty(DB)) await applyRemote(remote);
+      else if(remoteChanged && (SYNC.dirty || SYNC.lastRemote===null)) { syncBusy = false; askConflict(remote); return; }
+      else if(remoteChanged) await applyRemote(remote);
+      else if(SYNC.dirty) await pushLocal();
+      else { SYNC.lastSyncAt = Date.now(); await syncSave(); }
+    }
+  }catch(e){ syncErr = e.message; }
+  syncBusy = false;
+  if(view==='profil') renderProfil();
+}
+
+/* --- konflikt: zawsze pytaj --- */
+let _conflictRemote = null;
+function dataSummary(d){
+  const ts = d.meta && d.meta.updatedAt ? new Date(d.meta.updatedAt).toLocaleString('pl-PL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+  return `${(d.sessions||[]).length} treningów · ${(d.weights||[]).length} pomiarów wagi · ${(d.myex||[]).length} własnych ćw. · ${(d.myplans||[]).length} planów<br><small style="color:var(--dim)">ostatnia zmiana: ${ts}</small>`;
+}
+function askConflict(remote){
+  _conflictRemote = remote;
+  $('#conflictBody').innerHTML = `
+    <div class="cb-msg"><b>Masz dane w dwóch miejscach</b><br><span style="color:var(--dim);font-size:.85rem">Wybierz, co ma zostać. Wybór zapisze się w chmurze i na tym urządzeniu.</span></div>
+    <div class="card" style="font-size:.86rem;line-height:1.5"><b>To urządzenie</b><br>${dataSummary(DB)}</div>
+    <div class="card" style="font-size:.86rem;line-height:1.5"><b>Chmura</b><br>${dataSummary(remote.data)}</div>
+    <button class="btn btn-green" onclick="resolveConflict('merge')">Scal oba</button>
+    <button class="btn btn-ghost" style="margin-top:8px;border-color:var(--chalk);color:var(--chalk)" onclick="resolveConflict('cloud')">Zostaw chmurę</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="resolveConflict('device')">Zostaw to urządzenie</button>`;
+  const ov = $('#conflictOv'); ov.style.zIndex = ++zTop; ov.classList.add('on');
+}
+function mergeDB(a, b){
+  const byKey = (x, y, key) => { const m = new Map(); [...x, ...y].forEach(i=>{ const k = key(i); if(!m.has(k)) m.set(k,i); }); return [...m.values()]; };
+  const out = JSON.parse(JSON.stringify(a));
+  out.sessions = byKey(a.sessions, b.sessions||[], s=>s.date).sort((p,q)=>new Date(p.date)-new Date(q.date));
+  out.weights  = byKey(a.weights,  b.weights||[],  w=>w.date).sort((p,q)=>new Date(p.date)-new Date(q.date));
+  out.myex     = byKey(a.myex,     b.myex||[],     e=>e.id);
+  out.myplans  = byKey(a.myplans,  b.myplans||[],  p=>p.id);
+  if(!a.profile.height && b.profile && b.profile.height) out.profile = b.profile;
+  if(!(a.diet.days||[]).length && b.diet && (b.diet.days||[]).length) out.diet = b.diet;
+  return out;
+}
+async function resolveConflict(choice){
+  $('#conflictOv').classList.remove('on');
+  const remote = _conflictRemote; _conflictRemote = null;
+  syncBusy = true;
+  try{
+    if(choice==='cloud') await applyRemote(remote);
+    else {
+      if(choice==='merge'){ const r = remote.data; DB = mergeDB(DB, Object.assign({sessions:[],weights:[],myex:[],myplans:[]}, r)); normalizeDB(); }
+      DB.meta.updatedAt = Date.now(); await saveLocal();
+      SYNC.lastRemote = remote.updated_at;
+      await pushLocal();
+      render();
+    }
+    toast('Zsynchronizowano');
+  }catch(e){ syncErr = e.message; toast(e.message); }
+  syncBusy = false;
+}
+
+/* --- sekcja Konto w Profilu --- */
+function accountHTML(){
+  if(!AUTH) return `<div class="h2">Konto</div>
+    <div class="card" style="color:var(--dim);font-size:.88rem;line-height:1.5">Zaloguj się, żeby mieć te same dane na telefonie, komputerze i każdym innym urządzeniu.</div>
+    <button class="btn btn-red" onclick="openAuth()">Zaloguj / załóż konto</button>`;
+  const last = SYNC.lastSyncAt ? new Date(SYNC.lastSyncAt).toLocaleString('pl-PL',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : 'jeszcze nie';
+  const status = !navigator.onLine ? '<span style="color:var(--yellow)">offline — zmiany wyślą się po połączeniu</span>'
+    : syncErr ? `<span style="color:var(--red)">${esc(syncErr)}</span>`
+    : SYNC.dirty ? '<span style="color:var(--yellow)">oczekuje na wysłanie</span>'
+    : '<span style="color:var(--green)">aktualne</span>';
+  return `<div class="h2">Konto</div><div class="card">
+    <div style="font-weight:800">${esc(AUTH.user.email)}</div>
+    <div style="color:var(--dim);font-size:.82rem;margin-top:4px;line-height:1.5">Synchronizacja: ${status}<br>Ostatnio: ${last}</div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn btn-ghost" style="flex:1;padding:11px" onclick="syncNow().then(()=>toast(syncErr||'Zsynchronizowano'))">↻ Synchronizuj</button>
+      <button class="btn btn-ghost" style="flex:1;padding:11px" onclick="doLogout()">Wyloguj</button>
+    </div></div>`;
+}
+
+async function authInit(){
+  AUTH = await storeGet('progres-auth');
+  SYNC = Object.assign({lastRemote:null, dirty:false, lastSyncAt:null}, await storeGet('progres-sync')||{});
+  await handleAuthHash();
+  if(AUTH) await syncNow();
+  render();
+}
+window.addEventListener('online', ()=>syncNow());
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) syncNow(); });
+
 
 /* ============================================================
    WZNAWIANIE TRENINGU — trwały zapis aktywnej sesji
