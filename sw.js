@@ -1,6 +1,6 @@
-/* PROGRES — service worker v19: apka działa offline.
+/* PROGRES — service worker v20: apka działa offline.
    Po każdej zmianie w plikach podbij numer wersji, żeby telefony pobrały nową wersję. */
-const VERSION = 'zelazo-v19';
+const VERSION = 'zelazo-v20';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
