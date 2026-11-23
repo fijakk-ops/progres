@@ -1,6 +1,6 @@
 /* PROGRES — service worker: apka działa offline.
    Po każdej zmianie w plikach podbij numer wersji, żeby telefony pobrały nową wersję. */
-const VERSION = 'zelazo-v17';
+const VERSION = 'zelazo-v18';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,7 @@ self.addEventListener('activate', e => {
   );
 });
 
-/* strategia: najpierw sieć (żeby łapać aktualizacje), przy braku internetu — cache */
+/* najpierw sieć (aktualizacje), bez internetu — cache */
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(

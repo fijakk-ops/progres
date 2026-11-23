@@ -1,7 +1,7 @@
 {
   "name": "PROGRES — dziennik treningowy",
   "short_name": "PROGRES",
-  "description": "Plany treningowe, baza ćwiczeń, zapis serii i historia postępów.",
+  "description": "Plany treningowe, baza ćwiczeń, zapis serii, historia postępów i plan diety.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

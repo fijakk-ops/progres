@@ -198,6 +198,11 @@ nav button.on .ni{color:var(--red)}
 .delta-zero{color:var(--dim);font-weight:800}
 .bigval{font-size:2rem;font-weight:900;font-variation-settings:'wdth' 78;line-height:1}
 
+.mini-btn{padding:8px 12px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);font-weight:800;font-size:.78rem}
+.meal-lab{font-size:.68rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.bought label{text-decoration:line-through;color:var(--dim)}
+.bought b{color:var(--dim)}
+
 /* okno potwierdzenia */
 .confirm-ov{position:fixed;inset:0;background:rgba(10,12,15,.7);z-index:9200;display:none;align-items:center;justify-content:center;padding:24px}
 .confirm-ov.on{display:flex;animation:up .15s ease}
@@ -233,6 +238,7 @@ nav button.on .ni{color:var(--red)}
   <button data-v="pulpit" class="on"><span class="ni">◎</span>Pulpit</button>
   <button data-v="start"><span class="ni">▶</span>Trening</button>
   <button data-v="baza"><span class="ni">≡</span>Ćwiczenia</button>
+  <button data-v="dieta"><span class="ni">◇</span>Dieta</button>
   <button data-v="hist"><span class="ni">▲</span>Historia</button>
   <button data-v="profil"><span class="ni">●</span>Profil</button>
 </nav>
@@ -275,6 +281,7 @@ nav button.on .ni{color:var(--red)}
     <ol class="steps">
       <li>Po ostatniej serii wciśnij <b style="color:var(--green)">Zakończ trening</b> — sesja zapisze się w Historii. Liczą się tylko serie odhaczone ✓.</li>
       <li>Strzałka ← w trakcie treningu <b>nie kasuje</b> go — trening dalej trwa w tle i wrócisz do niego z ekranu startowego.</li>
+      <li>Jeśli telefon zamknie apkę w tle (np. przy zmianie muzyki), po powrocie trening <b>wznowi się sam</b> — z wpisanymi seriami i timerem przerwy.</li>
     </ol>
 
     <div class="h2">4 · Historia i rekordy</div>
@@ -290,6 +297,14 @@ nav button.on .ni{color:var(--red)}
       <li>W zakładce <b>Ćwiczenia</b> przycisk <b>＋ Dodaj własne ćwiczenie</b> — wypełniasz nazwę, kategorię, sprzęt, zaznaczasz mięśnie na liście i opisujesz technikę (każda linia = jeden krok). Własne ćwiczenia działają jak wbudowane: mapa mięśni, rekordy, plany.</li>
       <li>Własne ćwiczenie możesz potem <b>edytować lub usunąć</b> z poziomu jego szczegółów.</li>
       <li>Plany zapisujesz z kreatora „Własny" albo z Historii („Zapisz jako mój plan"). W podglądzie swojego planu masz <b>✎ Edytuj plan</b> — zmieniasz zestaw i nazwę.</li>
+    </ol>
+
+    <div class="h2">6 · Dieta</div>
+    <ol class="steps">
+      <li>Zakładka <b>Dieta</b> działa po uzupełnieniu Profilu (wzrost, wiek, płeć, aktywność, cel, waga) — porcje skalują się do Twojego zapotrzebowania.</li>
+      <li>W <b>⚙ Ustawieniach diety</b> wybierasz liczbę posiłków (3–5) i wykluczenia: gotowe (np. bez laktozy) oraz własne produkty po przecinku.</li>
+      <li><b>Wygeneruj plan na 30 dni</b> — dni przełączasz paskiem u góry. Przy posiłku: <b>↻ Losuj</b> podmienia go na inny, <b>☰ Wybierz</b> pokazuje listę zamienników. Kliknij nazwę dania, żeby zobaczyć przepis.</li>
+      <li><b>🛒 Lista zakupów</b> sumuje składniki od wybranego dnia na 1–14 dni (domyślnie tydzień). Odhaczaj, co już kupiłeś.</li>
     </ol>
 
     <button class="btn btn-red" style="margin-top:16px" onclick="closeSheet('shHelp')">Jasne, do roboty</button>
@@ -331,6 +346,24 @@ nav button.on .ni{color:var(--red)}
 <div class="sheet" id="shExForm">
   <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shExForm')">←</button><div class="sh-title" id="exFormTitle">Własne ćwiczenie</div></div>
   <div class="sheet-bd" id="exFormBody"></div>
+</div>
+
+<!-- arkusze: dieta -->
+<div class="sheet" id="shDietSet">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shDietSet');render()">←</button><div class="sh-title">Ustawienia diety</div></div>
+  <div class="sheet-bd" id="dietSetBody"></div>
+</div>
+<div class="sheet" id="shRecipe">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shRecipe')">←</button><div class="sh-title" id="recTitle"></div></div>
+  <div class="sheet-bd" id="recBody"></div>
+</div>
+<div class="sheet" id="shPick">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shPick')">←</button><div class="sh-title" id="pickTitle"></div></div>
+  <div class="sheet-bd" id="pickBody"></div>
+</div>
+<div class="sheet" id="shShop">
+  <div class="sheet-hd"><button class="backbtn" onclick="closeSheet('shShop')">←</button><div class="sh-title">Lista zakupów</div></div>
+  <div class="sheet-bd" id="shopBody"></div>
 </div>
 
 <!-- arkusz: dodaj ćwiczenie do treningu -->
@@ -628,7 +661,7 @@ function bodySVG(prim, sec){
 /* ============================================================
    STAN + ZAPIS DANYCH
    ============================================================ */
-const APP_VER = 'v17';
+const APP_VER = 'v18';
 const exById = id => EX.find(e=>e.id===id) || (DB.myex||[]).find(e=>e.id===id);
 const allEx = () => [...EX, ...(DB.myex||[])];
 const planById = id => PLANS.find(p=>p.id===id) || (DB.myplans||[]).find(p=>p.id===id);
@@ -652,6 +685,7 @@ async function loadDB(){
   DB.weights  = DB.weights  || [];
   DB.myplans  = DB.myplans  || [];
   DB.myex     = DB.myex     || [];
+  DB.diet     = Object.assign({meals:4, excl:[], custom:'', start:null, planMeals:null, days:[], bought:{}, shopDays:7, dirty:false}, DB.diet||{});
   DB.profile  = DB.profile  || {goal:'', height:'', age:'', sex:'', activity:''};
 }
 
@@ -818,6 +852,7 @@ function render(){
   else if(view==='start') renderStart();
   else if(view==='baza') renderBaza();
   else if(view==='profil') renderProfil();
+  else if(view==='dieta') renderDieta();
   else renderHist();
 }
 function goTab(v){
@@ -877,6 +912,12 @@ function renderPulpit(){
       <div class="statbox"><div class="sb-v" style="color:var(--green)">${diet.protein} g</div><div class="sb-l">białko / dzień</div></div>
     </div>
     <p style="color:var(--dim);font-size:.78rem;line-height:1.5;margin:2px 2px 0">Wyliczenie orientacyjne (wzór Mifflina) na podstawie profilu i celu. Obserwuj wykres wagi 2–3 tygodnie i koryguj o ±150 kcal.</p>`;
+    const dti = todayIdx();
+    h += `<button class="exrow" onclick="goTab('dieta')" style="margin-top:10px">
+      <span style="font-size:1.2rem">◇</span>
+      <div class="xr-body"><div class="xr-name">Plan diety</div>
+        <div class="xr-sub">${DB.diet.days.length ? (dti>=0 && dti<30 ? 'dziś: dzień '+(dti+1)+' z 30' : 'plan zakończony — wygeneruj nowy') : 'nie wygenerowano — rozpisz jadłospis na 30 dni'}</div></div>
+      <div style="color:var(--dim)">›</div></button>`;
   } else {
     h += `<div class="card" style="color:var(--dim);font-size:.88rem">Uzupełnij profil (wzrost, wiek, płeć, aktywność) i dodaj wagę — policzę Twoje zapotrzebowanie kaloryczne i cel białkowy.</div>`;
   }
@@ -1246,6 +1287,7 @@ function startWorkout(planId, exIds, name){
 }
 
 function renderWorkout(){
+  persistSession();
   $('#woTitle').textContent = session.planName;
   const doneSets = session.ex.reduce((a,e)=>a+e.sets.filter(s=>s.done).length,0);
   const vol = session.ex.reduce((a,e)=>a+e.sets.filter(s=>s.done).reduce((x,s)=>x+(+s.w||0)*(+s.r||0),0),0);
@@ -1262,9 +1304,9 @@ function renderWorkout(){
         <div class="set-no">${si+1}</div>
         <div class="set-prev">${s.prev ? (s.prev.w>0? s.prev.w+'×'+s.prev.r : s.prev.r) : '—'}</div>
         <input class="set-in" type="number" inputmode="decimal" min="0" step="0.5" placeholder="kg"
-          value="${s.w}" ${s.done?'disabled':''} onchange="setVal(${ei},${si},'w',this.value)">
+          value="${s.w}" ${s.done?'disabled':''} oninput="setVal(${ei},${si},'w',this.value)">
         <input class="set-in" type="number" inputmode="numeric" min="0" placeholder="powt."
-          value="${s.r}" ${s.done?'disabled':''} onchange="setVal(${ei},${si},'r',this.value)">
+          value="${s.r}" ${s.done?'disabled':''} oninput="setVal(${ei},${si},'r',this.value)">
         <button class="set-chk ${s.done?'ok':''}" onclick="toggleSet(${ei},${si})" aria-label="Zalicz serię">✓</button>
       </div>`;
     });
@@ -1382,7 +1424,7 @@ function delMyEx(id){
   });
 }
 
-function setVal(ei,si,k,v){ session.ex[ei].sets[si][k] = v; }
+function setVal(ei,si,k,v){ session.ex[ei].sets[si][k] = v; persistSession(); }
 function addSet(ei){
   const sets = session.ex[ei].sets;
   const prev = sets[sets.length-1];
@@ -1414,6 +1456,7 @@ function startRest(sec){
   clearInterval(restInterval);
   tickRest();
   restInterval = setInterval(tickRest, 500);
+  persistSession();
 }
 function tickRest(){
   restLeft = Math.max(0, Math.ceil((restEndAt - Date.now())/1000));
@@ -1429,8 +1472,9 @@ function timerAdd(s){
   restEndAt += s*1000;
   restTotal = Math.max(restTotal, Math.ceil((restEndAt-Date.now())/1000));
   tickRest();
+  persistSession();
 }
-function timerStop(){ clearInterval(restInterval); $('#timerbar').classList.remove('on'); }
+function timerStop(){ clearInterval(restInterval); $('#timerbar').classList.remove('on'); restEndAt = 0; persistSession(); }
 /* po powrocie do apki natychmiast przelicz timer */
 document.addEventListener('visibilitychange', ()=>{
   if(!document.hidden){
@@ -1467,6 +1511,7 @@ function goHome(){
 function endSession(){
   session = null;
   clearInterval(woInterval); timerStop(); releaseWake();
+  persistSession();
 }
 
 async function finishWorkout(){
@@ -1610,7 +1655,467 @@ async function delSess(idx){
   $('#hdrDate').textContent = new Date().toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long'});
   await loadDB();
   render();
+  await restoreSession();
 })();
+
+/* ============================================================
+   WZNAWIANIE TRENINGU — trwały zapis aktywnej sesji
+   (Android potrafi ubić apkę w tle, np. przy zmianie muzyki)
+   ============================================================ */
+async function storeSet(key,val){
+  try{ const s = JSON.stringify(val);
+    if(window.storage) await window.storage.set(key,s); else localStorage.setItem(key,s);
+  }catch(e){}
+}
+async function storeGet(key){
+  try{
+    if(window.storage){ const r = await window.storage.get(key); return r && r.value ? JSON.parse(r.value) : null; }
+    const v = localStorage.getItem(key); return v ? JSON.parse(v) : null;
+  }catch(e){ return null; }
+}
+async function storeDel(key){
+  try{ if(window.storage) await window.storage.delete(key); else localStorage.removeItem(key); }catch(e){}
+}
+function persistSession(){
+  if(session) storeSet('zelazo-session', {session, restEndAt: restEndAt||0, restTotal});
+  else storeDel('zelazo-session');
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden && session) persistSession(); });
+window.addEventListener('pagehide', ()=>{ if(session) persistSession(); });
+
+async function restoreSession(){
+  const saved = await storeGet('zelazo-session');
+  if(!saved || !saved.session) return;
+  session = saved.session;
+  renderWorkout();
+  openSheet('shWo');
+  clearInterval(woInterval);
+  woInterval = setInterval(()=>{ if(session) $('#woClock').textContent = fmtTime(Math.floor((Date.now()-session.start)/1000)); },1000);
+  if(saved.restEndAt && saved.restEndAt > Date.now()){
+    restTotal = saved.restTotal || 90;
+    restEndAt = saved.restEndAt;
+    $('#timerbar').classList.add('on');
+    clearInterval(restInterval);
+    tickRest();
+    restInterval = setInterval(tickRest, 500);
+  }
+  requestWake();
+  render();
+  toast('Wznowiono trening');
+}
+
+/* ============================================================
+   DIETA — baza produktów (wartości na 100 g / 100 ml)
+   szt = gramy na sztukę, lyz = gramy na łyżkę, ml = płyn,
+   t = tagi do wykluczeń
+   ============================================================ */
+const FOOD_CAT = {wo:'Warzywa i owoce', na:'Nabiał, jaja, tofu', mr:'Mięso i ryby', zb:'Pieczywo, kasze, makarony', sp:'Spiżarnia'};
+const FOOD = {
+  'banan':{k:89,p:1.1,f:0.3,c:23,cat:'wo',szt:120},
+  'jabłko':{k:52,p:0.3,f:0.2,c:14,cat:'wo',szt:180},
+  'borówki':{k:57,p:0.7,f:0.3,c:14,cat:'wo'},
+  'maliny':{k:52,p:1.2,f:0.7,c:12,cat:'wo'},
+  'owoce leśne mrożone':{k:50,p:1,f:0.3,c:11,cat:'wo'},
+  'awokado':{k:160,p:2,f:15,c:9,cat:'wo',szt:140},
+  'pomidor':{k:18,p:0.9,f:0.2,c:3.9,cat:'wo',szt:120},
+  'ogórek':{k:15,p:0.7,f:0.1,c:3.6,cat:'wo',szt:180},
+  'papryka':{k:31,p:1,f:0.3,c:6,cat:'wo',szt:160},
+  'marchew':{k:41,p:0.9,f:0.2,c:10,cat:'wo',szt:80},
+  'brokuł':{k:34,p:2.8,f:0.4,c:7,cat:'wo'},
+  'szpinak':{k:23,p:2.9,f:0.4,c:3.6,cat:'wo'},
+  'cukinia':{k:17,p:1.2,f:0.3,c:3.1,cat:'wo',szt:250},
+  'cebula':{k:40,p:1.1,f:0.1,c:9,cat:'wo',szt:100},
+  'mix sałat':{k:15,p:1.4,f:0.2,c:2.9,cat:'wo'},
+  'pieczarki':{k:22,p:3.1,f:0.3,c:3.3,cat:'wo'},
+  'ziemniaki':{k:77,p:2,f:0.1,c:17,cat:'wo'},
+  'bataty':{k:86,p:1.6,f:0.1,c:20,cat:'wo'},
+  'groszek mrożony':{k:81,p:5.4,f:0.4,c:14,cat:'wo'},
+  'mleko 2%':{k:50,p:3.4,f:2,c:4.8,cat:'na',ml:1,t:['laktoza']},
+  'jogurt naturalny':{k:60,p:4.3,f:2,c:6,cat:'na',t:['laktoza']},
+  'skyr naturalny':{k:63,p:11,f:0.2,c:4,cat:'na',t:['laktoza']},
+  'twaróg półtłusty':{k:133,p:18,f:4.7,c:3.7,cat:'na',t:['laktoza']},
+  'serek wiejski':{k:97,p:11,f:5,c:2,cat:'na',t:['laktoza']},
+  'ser żółty':{k:356,p:25,f:27,c:2,cat:'na',t:['laktoza']},
+  'mozzarella':{k:250,p:18,f:19,c:2,cat:'na',t:['laktoza']},
+  'feta':{k:265,p:14,f:21,c:4,cat:'na',t:['laktoza']},
+  'jajko':{k:143,p:12.6,f:9.5,c:0.7,cat:'na',szt:55,t:['jaja']},
+  'tofu naturalne':{k:120,p:12,f:7,c:2,cat:'na'},
+  'pierś z kurczaka':{k:99,p:21.5,f:1.3,c:0,cat:'mr',t:['mieso']},
+  'pierś z indyka':{k:84,p:19,f:1,c:0,cat:'mr',t:['mieso']},
+  'wołowina chuda':{k:130,p:21,f:5,c:0,cat:'mr',t:['mieso']},
+  'szynka drobiowa':{k:100,p:18,f:2.5,c:1.5,cat:'mr',t:['mieso']},
+  'łosoś':{k:201,p:20,f:13,c:0,cat:'mr',t:['ryby']},
+  'dorsz':{k:78,p:18,f:0.7,c:0,cat:'mr',t:['ryby']},
+  'tuńczyk w sosie własnym':{k:110,p:25,f:1,c:0,cat:'mr',t:['ryby']},
+  'płatki owsiane':{k:379,p:13,f:7,c:60,cat:'zb',t:['gluten']},
+  'chleb żytni razowy':{k:240,p:7,f:2,c:45,cat:'zb',t:['gluten']},
+  'chleb pełnoziarnisty':{k:250,p:9,f:3,c:43,cat:'zb',t:['gluten']},
+  'tortilla pszenna':{k:310,p:8,f:7,c:52,cat:'zb',szt:60,t:['gluten']},
+  'makaron pełnoziarnisty':{k:350,p:13,f:2.5,c:66,cat:'zb',t:['gluten']},
+  'ryż basmati':{k:355,p:8,f:0.8,c:78,cat:'zb'},
+  'kasza gryczana':{k:343,p:13,f:3.4,c:72,cat:'zb'},
+  'kasza jaglana':{k:360,p:11,f:4,c:72,cat:'zb'},
+  'komosa ryżowa':{k:368,p:14,f:6,c:64,cat:'zb'},
+  'wafle ryżowe':{k:387,p:8,f:3,c:81,cat:'zb',szt:10},
+  'ciecierzyca (konserwa)':{k:120,p:7,f:2.5,c:17,cat:'sp'},
+  'soczewica czerwona':{k:340,p:24,f:1.5,c:55,cat:'sp'},
+  'fasola czerwona (konserwa)':{k:100,p:7,f:0.5,c:15,cat:'sp'},
+  'kukurydza konserwowa':{k:80,p:3,f:1.2,c:15,cat:'sp'},
+  'passata pomidorowa':{k:32,p:1.5,f:0.2,c:6,cat:'sp'},
+  'mleko kokosowe':{k:197,p:2,f:21,c:3,cat:'sp',ml:1},
+  'oliwa z oliwek':{k:884,p:0,f:100,c:0,cat:'sp',lyz:10,ml:1},
+  'masło orzechowe':{k:588,p:25,f:50,c:20,cat:'sp',lyz:15,t:['orzechy']},
+  'orzechy włoskie':{k:654,p:15,f:65,c:14,cat:'sp',t:['orzechy']},
+  'migdały':{k:579,p:21,f:50,c:22,cat:'sp',t:['orzechy']},
+  'siemię lniane':{k:534,p:18,f:42,c:29,cat:'sp',lyz:10},
+  'miód':{k:304,p:0.3,f:0,c:82,cat:'sp',lyz:10},
+  'hummus':{k:166,p:8,f:10,c:14,cat:'sp'},
+  'sos sojowy':{k:53,p:8,f:0.6,c:4.9,cat:'sp',lyz:10,ml:1,t:['gluten']}
+};
+
+/* ============================================================
+   PRZEPISY — własna baza. t: sn śniadanie, pr przekąska, ob obiad, ko kolacja
+   ing: [produkt, gramy] dla porcji bazowej — apka skaluje porcję do Twojego celu
+   ============================================================ */
+const RECIPES = [
+/* ŚNIADANIA */
+{id:'sn1',t:'sn',name:'Owsianka bananowa z masłem orzechowym',ing:[['płatki owsiane',60],['mleko 2%',250],['banan',120],['masło orzechowe',15]],
+ steps:['Zagotuj mleko, wsyp płatki i gotuj 3–4 min, mieszając.','Przełóż do miski i dodaj pokrojonego banana.','Na wierzch połóż masło orzechowe.']},
+{id:'sn2',t:'sn',name:'Jajecznica z pomidorami na żytnim',ing:[['jajko',165],['oliwa z oliwek',5],['pomidor',120],['chleb żytni razowy',70]],
+ steps:['Rozgrzej oliwę, wbij jajka i smaż na małym ogniu, mieszając.','Dopraw solą i pieprzem pod koniec smażenia.','Podaj z chlebem i pokrojonym pomidorem.']},
+{id:'sn3',t:'sn',name:'Twarożek z ogórkiem na kanapkach',ing:[['twaróg półtłusty',150],['jogurt naturalny',50],['ogórek',90],['chleb pełnoziarnisty',80]],
+ steps:['Rozgnieć twaróg widelcem z jogurtem na gładką pastę.','Dodaj drobno pokrojonego ogórka, szczypiorek, sól i pieprz.','Nałóż pastę na kromki chleba.']},
+{id:'sn4',t:'sn',name:'Skyr z owocami leśnymi i orzechami',ing:[['skyr naturalny',250],['owoce leśne mrożone',150],['orzechy włoskie',20],['miód',10]],
+ steps:['Rozmroź owoce albo podgrzej je chwilę w garnku.','Przełóż skyr do miski i dodaj owoce.','Posyp posiekanymi orzechami i polej miodem.']},
+{id:'sn5',t:'sn',name:'Omlet ze szpinakiem i fetą',ing:[['jajko',165],['szpinak',60],['feta',30],['oliwa z oliwek',5],['chleb żytni razowy',50]],
+ steps:['Roztrzep jajka ze szczyptą soli i pieprzu.','Na oliwie podsmaż szpinak, aż zwiędnie, i zalej go jajkami.','Posyp pokruszoną fetą i smaż pod przykryciem 3–4 min. Podaj z chlebem.']},
+{id:'sn6',t:'sn',name:'Kanapki z hummusem i chrupiącymi warzywami',ing:[['chleb pełnoziarnisty',90],['hummus',60],['papryka',80],['ogórek',60]],
+ steps:['Posmaruj kromki grubą warstwą hummusu.','Ułóż na nich paski papryki i plastry ogórka.','Dopraw pieprzem lub słodką papryką.']},
+{id:'sn7',t:'sn',name:'Tofucznica z papryką',ing:[['tofu naturalne',180],['cebula',50],['papryka',80],['oliwa z oliwek',5],['chleb żytni razowy',60]],
+ steps:['Na oliwie zeszklij posiekaną cebulę i paprykę.','Dodaj rozkruszone widelcem tofu, dopraw kurkumą, solą i pieprzem.','Smaż ok. 5 min i podaj z chlebem.']},
+{id:'sn8',t:'sn',name:'Jaglanka z jabłkiem i migdałami',ing:[['kasza jaglana',60],['mleko 2%',250],['jabłko',150],['migdały',15]],
+ steps:['Przepłucz kaszę gorącą wodą i gotuj w mleku pod przykryciem ok. 15 min.','Dodaj pokrojone jabłko i cynamon, gotuj jeszcze 2 min.','Podawaj posypaną posiekanymi migdałami.']},
+{id:'sn9',t:'sn',name:'Kanapki z szynką i awokado',ing:[['chleb pełnoziarnisty',80],['szynka drobiowa',60],['awokado',70],['pomidor',100]],
+ steps:['Rozgnieć awokado z odrobiną soli i soku z cytryny.','Posmaruj nim chleb i ułóż szynkę.','Dołóż plastry pomidora.']},
+{id:'sn10',t:'sn',name:'Wafle ryżowe z awokado i jajkiem',ing:[['wafle ryżowe',30],['awokado',70],['jajko',110],['pomidor',100]],
+ steps:['Ugotuj jajka na twardo (ok. 9 min), obierz i pokrój.','Posmaruj wafle rozgniecionym awokado.','Ułóż jajko i pomidor, dopraw solą i pieprzem.']},
+/* PRZEKĄSKI (II śniadanie / podwieczorek) */
+{id:'pr1',t:'pr',name:'Jogurt z borówkami i siemieniem',ing:[['jogurt naturalny',200],['borówki',100],['siemię lniane',10]],
+ steps:['Przełóż jogurt do miseczki.','Dodaj borówki i posyp siemieniem lnianym.']},
+{id:'pr2',t:'pr',name:'Jabłko z masłem orzechowym',ing:[['jabłko',180],['masło orzechowe',15]],
+ steps:['Pokrój jabłko w cząstki.','Maczaj je w maśle orzechowym.']},
+{id:'pr3',t:'pr',name:'Banan z migdałami',ing:[['banan',120],['migdały',20]],
+ steps:['Zjedz banana z garścią migdałów — dobra opcja na godzinę przed treningiem.']},
+{id:'pr4',t:'pr',name:'Serek wiejski z pomidorem',ing:[['serek wiejski',200],['pomidor',120]],
+ steps:['Pokrój pomidora w kostkę i wymieszaj z serkiem.','Dopraw pieprzem i szczypiorkiem.']},
+{id:'pr5',t:'pr',name:'Hummus z warzywnymi słupkami',ing:[['hummus',50],['marchew',80],['papryka',80]],
+ steps:['Pokrój marchew i paprykę w słupki.','Maczaj warzywa w hummusie.']},
+{id:'pr6',t:'pr',name:'Wafle ryżowe z twarożkiem',ing:[['wafle ryżowe',20],['twaróg półtłusty',80],['ogórek',60]],
+ steps:['Rozgnieć twaróg z odrobiną wody i przyprawami.','Nałóż na wafle i przykryj plastrami ogórka.']},
+{id:'pr7',t:'pr',name:'Koktajl malinowo-bananowy',ing:[['maliny',100],['banan',100],['jogurt naturalny',150]],
+ steps:['Zmiksuj wszystkie składniki na gładko.','Jeśli koktajl jest za gęsty, dolej trochę wody.']},
+{id:'pr8',t:'pr',name:'Owoce z orzechami włoskimi',ing:[['orzechy włoskie',15],['maliny',100],['jabłko',100]],
+ steps:['Pokrój jabłko, wymieszaj z malinami i posyp posiekanymi orzechami.']},
+{id:'pr9',t:'pr',name:'Mini kanapka z tuńczykiem',ing:[['chleb żytni razowy',40],['tuńczyk w sosie własnym',60],['ogórek',50]],
+ steps:['Odsącz tuńczyka i rozgnieć go widelcem z pieprzem.','Nałóż na chleb i przykryj ogórkiem.']},
+/* OBIADY */
+{id:'ob1',t:'ob',name:'Kurczak z ryżem i brokułem',ing:[['pierś z kurczaka',180],['ryż basmati',70],['brokuł',200],['oliwa z oliwek',10]],
+ steps:['Ugotuj ryż według instrukcji na opakowaniu.','Pokrój kurczaka w kostkę, dopraw i usmaż na oliwie ok. 8 min.','Brokuł gotuj na parze 5–6 min i podaj wszystko razem.']},
+{id:'ob2',t:'ob',name:'Łosoś z ziemniakami i sałatką',ing:[['łosoś',140],['ziemniaki',250],['mix sałat',60],['pomidor',100],['oliwa z oliwek',5]],
+ steps:['Ugotuj ziemniaki w osolonej wodzie (ok. 20 min).','Łososia dopraw solą, pieprzem i cytryną, piecz 15 min w 200°C.','Sałatę i pomidora skrop oliwą.']},
+{id:'ob3',t:'ob',name:'Spaghetti bolognese z chudą wołowiną',ing:[['makaron pełnoziarnisty',80],['wołowina chuda',130],['passata pomidorowa',200],['cebula',50],['oliwa z oliwek',5]],
+ steps:['Ugotuj makaron al dente.','Na oliwie podsmaż cebulę, dodaj mięso i smaż, aż się zrumieni.','Wlej passatę, dopraw ziołami i duś 10 min. Wymieszaj z makaronem.']},
+{id:'ob4',t:'ob',name:'Curry z ciecierzycą i szpinakiem',ing:[['ciecierzyca (konserwa)',200],['mleko kokosowe',80],['szpinak',80],['ryż basmati',60],['cebula',50]],
+ steps:['Ugotuj ryż.','Podsmaż cebulę z curry w proszku, dodaj ciecierzycę i mleko kokosowe, gotuj 8 min.','Na koniec wmieszaj szpinak i podawaj z ryżem.']},
+{id:'ob5',t:'ob',name:'Dorsz z kaszą gryczaną i warzywami',ing:[['dorsz',180],['kasza gryczana',70],['cukinia',150],['papryka',100],['oliwa z oliwek',10]],
+ steps:['Ugotuj kaszę.','Pokrój warzywa i podsmaż je na połowie oliwy.','Dorsza dopraw i usmaż na reszcie oliwy, 3–4 min z każdej strony.']},
+{id:'ob6',t:'ob',name:'Indyk z pieczonym batatem i groszkiem',ing:[['pierś z indyka',180],['bataty',250],['groszek mrożony',100],['oliwa z oliwek',10]],
+ steps:['Pokrój bataty w kostkę, wymieszaj z połową oliwy i piecz 25 min w 200°C.','Pokrój indyka i usmaż na reszcie oliwy.','Groszek gotuj 4 min i podaj wszystko razem.']},
+{id:'ob7',t:'ob',name:'Gulasz wołowy z papryką i kaszą',ing:[['wołowina chuda',150],['papryka',150],['cebula',70],['passata pomidorowa',150],['kasza gryczana',60],['oliwa z oliwek',5]],
+ steps:['Pokrój mięso w kostkę i obsmaż je na oliwie.','Dodaj cebulę, paprykę i passatę, duś pod przykryciem ok. 40 min.','Podawaj z ugotowaną kaszą.']},
+{id:'ob8',t:'ob',name:'Dal z czerwonej soczewicy',ing:[['soczewica czerwona',80],['passata pomidorowa',150],['mleko kokosowe',50],['cebula',50],['ryż basmati',50]],
+ steps:['Podsmaż cebulę z kuminem i kurkumą (wystarczy odrobina wody).','Dodaj przepłukaną soczewicę, passatę i 300 ml wody, gotuj 15 min.','Wmieszaj mleko kokosowe i podawaj z ryżem.']},
+{id:'ob9',t:'ob',name:'Makaron z tuńczykiem w pomidorach',ing:[['makaron pełnoziarnisty',80],['tuńczyk w sosie własnym',120],['passata pomidorowa',150],['oliwa z oliwek',10]],
+ steps:['Ugotuj makaron.','Na oliwie podgrzej passatę z czosnkiem i oregano, gotuj 5 min.','Dodaj odsączonego tuńczyka i makaron, wymieszaj.']},
+{id:'ob10',t:'ob',name:'Tofu stir-fry z ryżem',ing:[['tofu naturalne',200],['ryż basmati',70],['papryka',120],['brokuł',120],['sos sojowy',15],['oliwa z oliwek',10]],
+ steps:['Ugotuj ryż.','Pokrój tofu w kostkę i usmaż na oliwie na złoto.','Dodaj warzywa, smaż 5 min i polej sosem sojowym.']},
+{id:'ob11',t:'ob',name:'Kurczak z ziemniakami i mizerią',ing:[['pierś z kurczaka',170],['ziemniaki',250],['ogórek',150],['jogurt naturalny',60],['oliwa z oliwek',5]],
+ steps:['Ugotuj ziemniaki.','Pierś dopraw i upiecz (20 min, 200°C) albo usmaż na oliwie.','Pokrój ogórka w plastry i wymieszaj z jogurtem, solą i koperkiem.']},
+{id:'ob12',t:'ob',name:'Miska burrito z fasolą',ing:[['fasola czerwona (konserwa)',150],['ryż basmati',70],['kukurydza konserwowa',60],['papryka',100],['awokado',50],['pomidor',100]],
+ steps:['Ugotuj ryż.','Podgrzej fasolę z kuminem i wędzoną papryką.','Ułóż w misce ryż, fasolę, kukurydzę, pokrojone warzywa i awokado.']},
+/* KOLACJE */
+{id:'ko1',t:'ko',name:'Sałatka z kurczakiem i fetą',ing:[['pierś z kurczaka',120],['mix sałat',80],['pomidor',120],['ogórek',100],['feta',40],['oliwa z oliwek',10],['chleb pełnoziarnisty',40]],
+ steps:['Usmaż lub upiecz doprawionego kurczaka i pokrój w paski.','Wymieszaj sałatę, pomidora i ogórka, dodaj pokruszoną fetę.','Polej oliwą i podaj z kromką chleba.']},
+{id:'ko2',t:'ko',name:'Tortilla z indykiem i warzywami',ing:[['tortilla pszenna',60],['pierś z indyka',100],['papryka',80],['mix sałat',40],['jogurt naturalny',40],['ser żółty',20]],
+ steps:['Usmaż pokrojonego indyka z przyprawami.','Posmaruj tortillę jogurtem, ułóż mięso, warzywa i ser.','Zawiń i podgrzej chwilę na suchej patelni.']},
+{id:'ko3',t:'ko',name:'Sałatka z tuńczykiem i jajkiem',ing:[['tuńczyk w sosie własnym',100],['jajko',110],['mix sałat',80],['kukurydza konserwowa',50],['pomidor',100],['oliwa z oliwek',10]],
+ steps:['Ugotuj jajka na twardo i pokrój.','Wymieszaj sałatę, pomidora, kukurydzę i odsączonego tuńczyka.','Dodaj jajka i polej oliwą.']},
+{id:'ko4',t:'ko',name:'Szakszuka',ing:[['jajko',165],['passata pomidorowa',200],['papryka',100],['cebula',50],['oliwa z oliwek',5],['chleb żytni razowy',50]],
+ steps:['Na oliwie podsmaż cebulę i paprykę.','Wlej passatę, dopraw kuminem i papryką, gotuj 5 min.','Zrób dołki, wbij jajka i duś pod przykryciem 6–8 min. Podawaj z chlebem.']},
+{id:'ko5',t:'ko',name:'Sałatka z komosą i ciecierzycą',ing:[['komosa ryżowa',50],['ciecierzyca (konserwa)',120],['ogórek',100],['pomidor',120],['oliwa z oliwek',10]],
+ steps:['Ugotuj komosę (ok. 15 min) i przestudź.','Wymieszaj ją z ciecierzycą i pokrojonymi warzywami.','Dopraw oliwą, sokiem z cytryny, solą i natką.']},
+{id:'ko6',t:'ko',name:'Pieczone warzywa z mozzarellą',ing:[['cukinia',200],['pieczarki',150],['papryka',100],['mozzarella',80],['chleb pełnoziarnisty',50]],
+ steps:['Pokrój warzywa, przełóż do naczynia żaroodpornego i dopraw ziołami.','Piecz 20 min w 200°C.','Ułóż plastry mozzarelli i zapiekaj jeszcze 5 min. Podaj z chlebem.']},
+{id:'ko7',t:'ko',name:'Łosoś na sałacie z awokado',ing:[['łosoś',100],['awokado',60],['mix sałat',80],['pomidor',100],['chleb żytni razowy',40]],
+ steps:['Upiecz łososia (15 min, 200°C).','Ułóż go na sałacie z pomidorem i awokado.','Skrop sokiem z cytryny i podaj z chlebem.']},
+{id:'ko8',t:'ko',name:'Kanapki z pastą jajeczną',ing:[['jajko',110],['chleb żytni razowy',80],['jogurt naturalny',30],['pomidor',120]],
+ steps:['Ugotuj jajka na twardo, posiekaj i wymieszaj z jogurtem i szczypiorkiem.','Nałóż pastę na chleb.','Podaj z pomidorem.']},
+{id:'ko9',t:'ko',name:'Krem z czerwonej soczewicy',ing:[['soczewica czerwona',60],['marchew',100],['cebula',50],['passata pomidorowa',100],['oliwa z oliwek',5]],
+ steps:['Na oliwie podsmaż cebulę i startą marchew.','Dodaj soczewicę, passatę i 500 ml wody, gotuj 20 min.','Zmiksuj na krem, dopraw kuminem, solą i pieprzem.']}
+];
+
+function nutOf(ing, factor){
+  let k=0,p=0,f=0,c=0;
+  ing.forEach(([name,g])=>{ const x = FOOD[name], m = g*factor/100; k+=x.k*m; p+=x.p*m; f+=x.f*m; c+=x.c*m; });
+  return {kcal:k, prot:p, fat:f, carb:c};
+}
+RECIPES.forEach(r=>{
+  Object.assign(r, nutOf(r.ing, 1));
+  r.tags = [...new Set(r.ing.flatMap(([name])=>FOOD[name].t||[]))];
+});
+const recById = id => RECIPES.find(r=>r.id===id);
+
+const EXCL = [
+  {id:'mieso',l:'Bez mięsa'},{id:'ryby',l:'Bez ryb'},{id:'laktoza',l:'Bez laktozy'},
+  {id:'gluten',l:'Bez glutenu'},{id:'jaja',l:'Bez jaj'},{id:'orzechy',l:'Bez orzechów'}
+];
+/* [typ przepisu, etykieta, udział w dziennych kcal] */
+const MEAL_SLOTS = {
+  3:[['sn','Śniadanie',.30],['ob','Obiad',.40],['ko','Kolacja',.30]],
+  4:[['sn','Śniadanie',.25],['pr','II śniadanie',.15],['ob','Obiad',.35],['ko','Kolacja',.25]],
+  5:[['sn','Śniadanie',.25],['pr','II śniadanie',.10],['ob','Obiad',.35],['pr','Podwieczorek',.10],['ko','Kolacja',.20]]
+};
+
+const fmtNum = n => String(n).replace('.',',');
+function fmtQty(name, g, shop){
+  const f = FOOD[name];
+  if(f.szt){
+    let n = g/f.szt;
+    n = shop ? Math.ceil(n*2)/2 : Math.round(n*2)/2;
+    if(n<0.5) n = 0.5;
+    return fmtNum(n)+' szt.';
+  }
+  if(f.lyz && !shop){
+    let n = Math.round(g/f.lyz*2)/2; if(n<0.5) n = 0.5;
+    return fmtNum(n)+' '+(n<=1 ? 'łyżka' : (n<5 ? 'łyżki' : 'łyżek'));
+  }
+  let v = Math.round(g/5)*5; if(v<5) v = 5;
+  return v+(f.ml?' ml':' g');
+}
+
+/* --- stan planu --- */
+let dietDay = null;
+function todayISO(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dayDate(idx){ const d = new Date(DB.diet.start+'T00:00:00'); d.setDate(d.getDate()+idx); return d; }
+const fmtDM = d => String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0');
+function todayIdx(){
+  if(!DB.diet.start) return -1;
+  return Math.round((new Date(todayISO()+'T00:00:00') - new Date(DB.diet.start+'T00:00:00'))/864e5);
+}
+function customTerms(){ return (DB.diet.custom||'').toLowerCase().split(',').map(s=>s.trim()).filter(s=>s.length>=3); }
+function recipeAllowed(r){
+  if((DB.diet.excl||[]).some(e=>r.tags.includes(e))) return false;
+  const terms = customTerms();
+  return !terms.some(t => r.name.toLowerCase().includes(t) || r.ing.some(([name])=>name.includes(t)));
+}
+const candidates = type => RECIPES.filter(r=>r.t===type && recipeAllowed(r));
+const pickRand = a => a[Math.floor(Math.random()*a.length)];
+
+function genPlan(){
+  const slots = MEAL_SLOTS[DB.diet.meals];
+  const days = [];
+  for(let d=0; d<30; d++){
+    const day = [];
+    slots.forEach((s,si)=>{
+      const cand = candidates(s[0]);
+      if(!cand.length){ day.push(null); return; }
+      const recent = [days[d-1], days[d-2]].filter(Boolean).map(x=>x[si]);
+      let pool = cand.filter(r=>!recent.includes(r.id) && !day.includes(r.id));
+      if(!pool.length) pool = cand.filter(r=>!day.includes(r.id));
+      if(!pool.length) pool = cand;
+      day.push(pickRand(pool).id);
+    });
+    days.push(day);
+  }
+  Object.assign(DB.diet, {start:todayISO(), days, planMeals:DB.diet.meals, dirty:false, bought:{}});
+  dietDay = 0;
+}
+function slotFactor(si, r){
+  const di = dietInfo();
+  const share = MEAL_SLOTS[DB.diet.planMeals][si][2];
+  return Math.min(3, Math.max(0.5, di.kcal*share / r.kcal));
+}
+
+/* --- widok DIETA --- */
+function renderDieta(){
+  const di = dietInfo();
+  if(!di){
+    $('#main').innerHTML = `<div class="h2">Dieta</div>
+      <div class="card" style="color:var(--dim);font-size:.9rem;line-height:1.5">Plan diety skaluje porcje do Twojego zapotrzebowania. Uzupełnij w Profilu wzrost, wiek, płeć, aktywność i cel oraz dodaj aktualną wagę.</div>
+      <button class="btn btn-red" onclick="goTab('profil')">Przejdź do Profilu</button>`;
+    return;
+  }
+  const D = DB.diet;
+  let h = `<p style="color:var(--dim);font-size:.88rem;margin:10px 2px 0">Cel dzienny: <b style="color:var(--chalk)">${di.kcal} kcal</b> · białko <b style="color:var(--chalk)">${di.protein} g</b></p>`;
+  h += `<button class="exrow" onclick="openDietSet()" style="margin-top:12px">
+    <span style="font-size:1.3rem">⚙</span>
+    <div class="xr-body"><div class="xr-name">Ustawienia diety</div>
+      <div class="xr-sub">${D.meals} posiłki dziennie · wykluczenia: ${(D.excl.length + customTerms().length) || 'brak'}</div></div>
+    <div style="color:var(--dim)">›</div></button>`;
+
+  if(!D.days.length){
+    h += `<div class="card" style="color:var(--dim);font-size:.9rem;line-height:1.5">Nie masz jeszcze planu. Ustaw liczbę posiłków i wykluczenia, potem wygeneruj jadłospis na 30 dni, zaczynając od dziś.</div>
+      <button class="btn btn-red" onclick="regenPlan()">Wygeneruj plan na 30 dni</button>`;
+  } else {
+    const ti = todayIdx();
+    if(dietDay===null) dietDay = Math.min(29, Math.max(0, ti));
+    if(D.dirty) h += `<div class="tipbox" style="margin-bottom:10px"><b>Ustawienia się zmieniły.</b> Obecny plan powstał według starych ustawień. <button style="color:var(--yellow);font-weight:800;text-decoration:underline" onclick="regenPlan()">Wygeneruj ponownie</button></div>`;
+    if(ti>29) h += `<div class="tipbox" style="margin-bottom:10px"><b>Plan się zakończył.</b> <button style="color:var(--yellow);font-weight:800;text-decoration:underline" onclick="regenPlan()">Wygeneruj nowy na 30 dni</button></div>`;
+    h += `<div class="h2">Dzień ${dietDay+1} z 30</div><div class="chiprow" id="dayRow">` +
+      D.days.map((_,i)=>`<button id="dayChip${i}" class="chip ${dietDay===i?'on':''}" style="${i===ti&&dietDay!==i?'border-color:var(--yellow);color:var(--yellow)':''}" onclick="dietDay=${i};renderDieta()">${i+1} · ${fmtDM(dayDate(i))}</button>`).join('') +
+      `</div>`;
+    const slots = MEAL_SLOTS[D.planMeals];
+    let tk=0, tp=0;
+    const cards = D.days[dietDay].map((rid,si)=>{
+      const label = slots[si][1];
+      if(!rid) return `<div class="card"><div class="meal-lab">${label}</div><div style="color:var(--dim);font-size:.88rem;margin-top:6px">Brak przepisu pasującego do wykluczeń — poluzuj je w ustawieniach.</div></div>`;
+      const r = recById(rid), f = slotFactor(si,r);
+      tk += r.kcal*f; tp += r.prot*f;
+      return `<div class="card">
+        <div class="meal-lab">${label} · ${Math.round(r.kcal*f)} kcal</div>
+        <button style="text-align:left;width:100%;font-weight:800;font-size:1rem;margin:6px 0 3px" onclick="openRecipe(${si})">${r.name} <span style="color:var(--dim)">›</span></button>
+        <div style="color:var(--dim);font-size:.8rem">B ${Math.round(r.prot*f)} g · T ${Math.round(r.fat*f)} g · W ${Math.round(r.carb*f)} g</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="mini-btn" onclick="swapRandom(${si})">↻ Losuj</button>
+          <button class="mini-btn" onclick="openPick(${si})">☰ Wybierz</button>
+        </div></div>`;
+    }).join('');
+    h += `<div class="hist-stats">
+      <div class="statbox"><div class="sb-v" style="color:var(--yellow)">${Math.round(tk)}</div><div class="sb-l">kcal / ${di.kcal}</div></div>
+      <div class="statbox"><div class="sb-v" style="color:var(--green)">${Math.round(tp)} g</div><div class="sb-l">białko / ${di.protein} g</div></div>
+      <div class="statbox"><div class="sb-v">${fmtDM(dayDate(dietDay))}</div><div class="sb-l">data</div></div>
+    </div>` + cards;
+    h += `<button class="btn btn-red" style="margin-top:8px" onclick="openShop()">🛒 Lista zakupów</button>
+      <button class="btn btn-ghost" style="margin-top:10px" onclick="askRegen()">Wygeneruj nowy plan</button>`;
+  }
+  h += `<p style="color:var(--dim);font-size:.75rem;line-height:1.5;margin:16px 2px 0">Plan orientacyjny, liczony z profilu. Przy chorobach, alergiach lub ciąży skonsultuj dietę z dietetykiem.</p>`;
+  $('#main').innerHTML = h;
+  const chip = document.getElementById('dayChip'+dietDay);
+  if(chip) chip.scrollIntoView({inline:'center', block:'nearest'});
+}
+async function regenPlan(){ genPlan(); await saveDB(); renderDieta(); toast('Plan na 30 dni gotowy'); }
+function askRegen(){ askConfirm('Wygenerować nowy plan na 30 dni od dziś? Obecny zostanie zastąpiony.', 'Generuj', regenPlan); }
+
+/* --- zamiana posiłku --- */
+async function swapRandom(si){
+  const cur = DB.diet.days[dietDay][si];
+  const type = MEAL_SLOTS[DB.diet.planMeals][si][0];
+  const pool = candidates(type).filter(r=>r.id!==cur);
+  if(!pool.length){ toast('Brak innych przepisów w tych wykluczeniach'); return; }
+  DB.diet.days[dietDay][si] = pickRand(pool).id;
+  await saveDB(); renderDieta();
+}
+function openPick(si){
+  const cur = DB.diet.days[dietDay][si];
+  const type = MEAL_SLOTS[DB.diet.planMeals][si][0];
+  const list = candidates(type);
+  $('#pickTitle').textContent = MEAL_SLOTS[DB.diet.planMeals][si][1];
+  $('#pickBody').innerHTML = list.length ? list.map(r=>{
+    const f = slotFactor(si,r);
+    return `<button class="exrow" onclick="pickRecipe(${si},'${r.id}')" style="${r.id===cur?'border-color:var(--green)':''}">
+      <div class="xr-body"><div class="xr-name">${r.name}</div>
+      <div class="xr-sub">${Math.round(r.kcal*f)} kcal · B ${Math.round(r.prot*f)} g${r.id===cur?' · <span style="color:var(--green);font-weight:700">obecny</span>':''}</div></div>
+      <div style="color:var(--dim)">›</div></button>`;
+  }).join('') : `<div class="empty">Brak przepisów w tych wykluczeniach.</div>`;
+  openSheet('shPick');
+}
+async function pickRecipe(si, id){
+  DB.diet.days[dietDay][si] = id;
+  await saveDB(); closeSheet('shPick'); renderDieta();
+}
+
+/* --- przepis --- */
+function openRecipe(si){
+  const r = recById(DB.diet.days[dietDay][si]), f = slotFactor(si,r);
+  $('#recTitle').textContent = r.name;
+  $('#recBody').innerHTML = `<div class="hist-stats">
+      <div class="statbox"><div class="sb-v" style="color:var(--yellow)">${Math.round(r.kcal*f)}</div><div class="sb-l">kcal</div></div>
+      <div class="statbox"><div class="sb-v" style="color:var(--green)">${Math.round(r.prot*f)} g</div><div class="sb-l">białko</div></div>
+      <div class="statbox"><div class="sb-v">${Math.round(r.fat*f)} / ${Math.round(r.carb*f)}</div><div class="sb-l">tłuszcz / węgl. (g)</div></div>
+    </div>
+    <div class="h2">Składniki — 1 porcja</div><div class="card">` +
+    r.ing.map(([name,g])=>`<div class="wrow"><span>${name}</span><b>${fmtQty(name, g*f)}</b></div>`).join('') +
+    `</div><div class="h2">Przygotowanie</div><ol class="steps">${r.steps.map(s=>`<li>${s}</li>`).join('')}</ol>
+    <div class="tipbox"><b>Przyprawy:</b> sól, pieprz, zioła i sok z cytryny dodawaj do smaku — nie wliczają się w kalorie.</div>`;
+  openSheet('shRecipe');
+}
+
+/* --- ustawienia diety --- */
+function openDietSet(){
+  const D = DB.diet;
+  $('#dietSetBody').innerHTML = `
+    <div class="card"><div class="frm" style="margin-bottom:0"><label>Liczba posiłków dziennie</label>
+      <select onchange="setDiet('meals',+this.value)">
+        ${[3,4,5].map(n=>`<option value="${n}" ${D.meals===n?'selected':''}>${n} posiłki${n===5?' (z podwieczorkiem)':''}</option>`).join('')}
+      </select></div></div>
+    <div class="h2">Wykluczenia</div><div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">` +
+      EXCL.map(e=>`<div class="pickrow" style="padding:8px 2px">
+        <input type="checkbox" id="ex_${e.id}" ${D.excl.includes(e.id)?'checked':''} onchange="toggleExcl('${e.id}',this.checked)">
+        <label for="ex_${e.id}" style="font-size:.88rem">${e.l}</label></div>`).join('') +
+      `</div>
+      <div class="frm" style="margin:12px 0 0"><label>Własne wykluczenia (po przecinku)</label>
+        <input type="text" maxlength="200" value="${esc(D.custom||'')}" placeholder="np. cebula, pieczarki, łosoś" onchange="setDiet('custom',this.value)">
+        <p style="color:var(--dim);font-size:.78rem;margin-top:6px">Pomija przepisy, które zawierają wpisany produkt (min. 3 litery).</p></div>
+    </div>
+    <p style="color:var(--dim);font-size:.8rem;line-height:1.5">Zmiany dotyczą nowego planu, losowania i wyboru posiłków.</p>`;
+  openSheet('shDietSet');
+}
+async function setDiet(k,v){
+  DB.diet[k] = v;
+  if(DB.diet.days.length) DB.diet.dirty = true;
+  await saveDB();
+}
+async function toggleExcl(id,on){
+  const s = new Set(DB.diet.excl);
+  on ? s.add(id) : s.delete(id);
+  await setDiet('excl', [...s]);
+}
+
+/* --- lista zakupów --- */
+let shopKeys = [];
+function openShop(){ renderShop(); openSheet('shShop'); }
+function renderShop(){
+  const D = DB.diet, n = D.shopDays || 7;
+  const from = dietDay, to = Math.min(29, from+n-1);
+  const agg = {};
+  for(let d=from; d<=to; d++) D.days[d].forEach((rid,si)=>{
+    if(!rid) return;
+    const r = recById(rid), f = slotFactor(si,r);
+    r.ing.forEach(([name,g])=>{ agg[name] = (agg[name]||0) + g*f; });
+  });
+  shopKeys = Object.keys(agg);
+  let h = `<div class="card"><div class="frm" style="margin-bottom:0"><label>Na ile dni</label>
+    <select onchange="DB.diet.shopDays=+this.value;saveDB();renderShop()">` +
+    Array.from({length:14},(_,i)=>i+1).map(i=>`<option value="${i}" ${n===i?'selected':''}>${i} ${i===1?'dzień':'dni'}${i===7?' (tydzień)':''}</option>`).join('') +
+    `</select>
+    <p style="color:var(--dim);font-size:.8rem;margin-top:8px">Dni ${from+1}–${to+1} planu · ${fmtDM(dayDate(from))}–${fmtDM(dayDate(to))}</p></div></div>`;
+  Object.entries(FOOD_CAT).forEach(([cat,label])=>{
+    const items = shopKeys.map((k,i)=>[k,i]).filter(([k])=>FOOD[k].cat===cat);
+    if(!items.length) return;
+    h += `<div class="h2">${label}</div><div class="card">` + items.map(([k,i])=>`
+      <div class="pickrow ${D.bought[k]?'bought':''}" style="padding:9px 2px">
+        <input type="checkbox" id="sh_${i}" ${D.bought[k]?'checked':''} onchange="toggleBought(${i},this.checked)">
+        <label for="sh_${i}">${k}</label><b style="font-size:.9rem">${fmtQty(k, agg[k], true)}</b></div>`).join('') + `</div>`;
+  });
+  h += `<button class="btn btn-ghost" style="margin-top:6px" onclick="DB.diet.bought={};saveDB();renderShop()">Wyczyść zaznaczenia</button>`;
+  $('#shopBody').innerHTML = h;
+}
+async function toggleBought(i, on){
+  DB.diet.bought[shopKeys[i]] = on;
+  await saveDB(); renderShop();
+}
+
 </script>
 </body>
 </html>
